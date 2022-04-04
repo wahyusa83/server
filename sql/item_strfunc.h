@@ -259,8 +259,15 @@ protected:
 public:
   Item_func_concat(THD *thd, List<Item> &list): Item_str_func(thd, list) {}
   Item_func_concat(THD *thd, Item *a, Item *b): Item_str_func(thd, a, b) {}
+  static Item_func_concat* create(THD *thd, const LEX_CSTRING &name,
+                                  List<Item> *list);
   String *val_str(String *);
   bool fix_length_and_dec();
+  const Schema *schema() const { return &mariadb_schema; }
+  void print(String *str, enum_query_type query_type)
+  {
+    print_sql_mode_dependent(str, query_type);
+  }
   const char *func_name() const { return "concat"; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_concat>(thd, this); }
@@ -280,8 +287,20 @@ public:
   Item_func_concat_operator_oracle(THD *thd, Item *a, Item *b)
    :Item_func_concat(thd, a, b)
   { }
+  static Item_func_concat_operator_oracle* create(THD *thd,
+                                                  const LEX_CSTRING &name,
+                                                  List<Item> *list);
   String *val_str(String *);
-  const char *func_name() const { return "concat_operator_oracle"; }
+  const Schema *schema() const { return &oracle_schema_ref; }
+  void print(String *str, enum_query_type query_type)
+  {
+    static const LEX_CSTRING suffix= {STRING_WITH_LEN("operator_oracle")};
+    print_sql_mode_dependent_name(str, query_type,
+                                  oracle_schema_ref,
+                                  Item_func_concat::func_name(),
+                                  suffix);
+    print_args_parenthesized(str, query_type);
+  }
   Item *get_copy(THD *thd)
   {
     return get_item_copy<Item_func_concat_operator_oracle>(thd, this);
@@ -342,6 +361,11 @@ public:
   String *val_str(String *to) { return val_str_internal(to, NULL); };
   bool fix_length_and_dec();
   String *val_str_internal(String *str, String *empty_string_for_null);
+  const Schema *schema() const { return &mariadb_schema; }
+  void print(String *str, enum_query_type query_type)
+  {
+    print_sql_mode_dependent(str, query_type);
+  }
   const char *func_name() const { return "replace"; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_replace>(thd, this); }
@@ -355,7 +379,7 @@ public:
   Item_func_replace_oracle(THD *thd, Item *org, Item *find, Item *replace):
     Item_func_replace(thd, org, find, replace) {}
   String *val_str(String *to) { return val_str_internal(to, &tmp_emtpystr); };
-  const char *func_name() const { return "replace_oracle"; }
+  const Schema *schema() const { return &oracle_schema_ref; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_replace_oracle>(thd, this); }
 };
@@ -493,6 +517,11 @@ public:
     Item_str_func(thd, a, b, c) {}
   String *val_str(String *);
   bool fix_length_and_dec();
+  const Schema *schema() const { return &mariadb_schema; }
+  void print(String *str, enum_query_type query_type)
+  {
+    print_sql_mode_dependent(str, query_type);
+  }
   const char *func_name() const { return "substr"; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_substr>(thd, this); }
@@ -516,7 +545,7 @@ public:
     maybe_null= true;
     return res;
   }
-  const char *func_name() const { return "substr_oracle"; }
+  const Schema *schema() const { return &oracle_schema_ref; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_substr_oracle>(thd, this); }
 };
@@ -559,13 +588,13 @@ protected:
   {
     return trimmed_value(res, 0, res->length());
   }
-  virtual const char *func_name_ext() const { return ""; }
 public:
   Item_func_trim(THD *thd, Item *a, Item *b): Item_str_func(thd, a, b) {}
   Item_func_trim(THD *thd, Item *a): Item_str_func(thd, a) {}
   Sql_mode_dependency value_depends_on_sql_mode() const;
   String *val_str(String *);
   bool fix_length_and_dec();
+  const Schema *schema() const { return &mariadb_schema; }
   const char *func_name() const { return "trim"; }
   void print(String *str, enum_query_type query_type);
   virtual const char *mode_name() const { return "both"; }
@@ -579,12 +608,11 @@ class Item_func_trim_oracle :public Item_func_trim
 protected:
   String *make_empty_result()
   { null_value= 1; return NULL; }
-  const char *func_name_ext() const { return "_oracle"; }
 public:
   Item_func_trim_oracle(THD *thd, Item *a, Item *b):
     Item_func_trim(thd, a, b) {}
   Item_func_trim_oracle(THD *thd, Item *a): Item_func_trim(thd, a) {}
-  const char *func_name() const { return "trim_oracle"; }
+  const Schema *schema() const { return &oracle_schema_ref; }
   bool fix_length_and_dec()
   {
     bool res= Item_func_trim::fix_length_and_dec();
@@ -606,6 +634,7 @@ public:
     return Item_func::value_depends_on_sql_mode();
   }
   String *val_str(String *);
+  const Schema *schema() const { return &mariadb_schema; }
   const char *func_name() const { return "ltrim"; }
   const char *mode_name() const { return "leading"; }
   Item *get_copy(THD *thd)
@@ -618,12 +647,11 @@ class Item_func_ltrim_oracle :public Item_func_ltrim
 protected:
   String *make_empty_result()
   { null_value= 1; return NULL; }
-  const char *func_name_ext() const { return "_oracle"; }
 public:
   Item_func_ltrim_oracle(THD *thd, Item *a, Item *b):
     Item_func_ltrim(thd, a, b) {}
   Item_func_ltrim_oracle(THD *thd, Item *a): Item_func_ltrim(thd, a) {}
-  const char *func_name() const { return "ltrim_oracle"; }
+  const Schema *schema() const { return &oracle_schema_ref; }
   bool fix_length_and_dec()
   {
     bool res= Item_func_ltrim::fix_length_and_dec();
@@ -641,6 +669,7 @@ public:
   Item_func_rtrim(THD *thd, Item *a, Item *b): Item_func_trim(thd, a, b) {}
   Item_func_rtrim(THD *thd, Item *a): Item_func_trim(thd, a) {}
   String *val_str(String *);
+  const Schema *schema() const { return &mariadb_schema; }
   const char *func_name() const { return "rtrim"; }
   const char *mode_name() const { return "trailing"; }
   Item *get_copy(THD *thd)
@@ -653,12 +682,11 @@ class Item_func_rtrim_oracle :public Item_func_rtrim
 protected:
   String *make_empty_result()
   { null_value= 1; return NULL; }
-  const char *func_name_ext() const { return "_oracle"; }
 public:
   Item_func_rtrim_oracle(THD *thd, Item *a, Item *b):
     Item_func_rtrim(thd, a, b) {}
   Item_func_rtrim_oracle(THD *thd, Item *a): Item_func_rtrim(thd, a) {}
-  const char *func_name() const { return "rtrim_oracle"; }
+  const Schema *schema() const { return &oracle_schema_ref; }
   bool fix_length_and_dec()
   {
     bool res= Item_func_rtrim::fix_length_and_dec();
@@ -820,6 +848,13 @@ class Item_func_decode :public Item_func_encode
 {
 public:
   Item_func_decode(THD *thd, Item *a, Item *seed_arg): Item_func_encode(thd, a, seed_arg) {}
+  static Item_func_decode *create(THD *thd, const LEX_CSTRING &name,
+                                  List<Item> *item_list);
+  const Schema *schema() const { return &mariadb_schema; }
+  void print(String *str, enum_query_type query_type)
+  {
+    print_sql_mode_dependent(str, query_type);
+  }
   const char *func_name() const { return "decode"; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_decode>(thd, this); }
@@ -1125,6 +1160,8 @@ public:
     Item_str_func(thd, arg1, arg2, arg3) {}
   Item_func_pad(THD *thd, Item *arg1, Item *arg2):
     Item_str_func(thd, arg1, arg2) {}
+  Item_func_pad(THD *thd, List<Item> &list):
+    Item_str_func(thd,list) {}
   bool fix_length_and_dec();
 };
 
@@ -1136,7 +1173,16 @@ public:
     Item_func_pad(thd, arg1, arg2, arg3) {}
   Item_func_rpad(THD *thd, Item *arg1, Item *arg2):
     Item_func_pad(thd, arg1, arg2) {}
+  Item_func_rpad(THD *thd, List<Item> &list):
+    Item_func_pad(thd,list) {}
+  static Item_func_rpad *create(THD *thd, const LEX_CSTRING &name,
+                                List<Item> *item_list);
   String *val_str(String *);
+  const Schema *schema() const { return &mariadb_schema; }
+  void print(String *str, enum_query_type query_type)
+  {
+    print_sql_mode_dependent(str, query_type);
+  }
   const char *func_name() const { return "rpad"; }
   Sql_mode_dependency value_depends_on_sql_mode() const;
   Item *get_copy(THD *thd)
@@ -1153,13 +1199,17 @@ public:
     Item_func_rpad(thd, arg1, arg2, arg3) {}
   Item_func_rpad_oracle(THD *thd, Item *arg1, Item *arg2):
     Item_func_rpad(thd, arg1, arg2) {}
+  Item_func_rpad_oracle(THD *thd, List<Item> &list):
+    Item_func_rpad(thd,list) {}
+  static Item_func_rpad_oracle *create(THD *thd, const LEX_CSTRING &name,
+                                       List<Item> *item_list);
   bool fix_length_and_dec()
   {
     bool res= Item_func_rpad::fix_length_and_dec();
     maybe_null= true;
     return res;
   }
-  const char *func_name() const { return "rpad_oracle"; }
+  const Schema *schema() const { return &oracle_schema_ref; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_rpad_oracle>(thd, this); }
 };
@@ -1172,7 +1222,16 @@ public:
     Item_func_pad(thd, arg1, arg2, arg3) {}
   Item_func_lpad(THD *thd, Item *arg1, Item *arg2):
     Item_func_pad(thd, arg1, arg2) {}
+  Item_func_lpad(THD *thd, List<Item> &list):
+    Item_func_pad(thd,list) {}
+  static Item_func_lpad *create(THD *thd, const LEX_CSTRING &name,
+                                List<Item> *item_list);
   String *val_str(String *);
+  const Schema *schema() const { return &mariadb_schema; }
+  void print(String *str, enum_query_type query_type)
+  {
+    print_sql_mode_dependent(str, query_type);
+  }
   const char *func_name() const { return "lpad"; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_lpad>(thd, this); }
@@ -1188,13 +1247,17 @@ public:
     Item_func_lpad(thd, arg1, arg2, arg3) {}
   Item_func_lpad_oracle(THD *thd, Item *arg1, Item *arg2):
     Item_func_lpad(thd, arg1, arg2) {}
+  Item_func_lpad_oracle(THD *thd, List<Item> &list):
+    Item_func_lpad(thd,list) {}
+  static Item_func_lpad_oracle *create(THD *thd, const LEX_CSTRING &name,
+                                       List<Item> *item_list);
   bool fix_length_and_dec()
   {
     bool res= Item_func_lpad::fix_length_and_dec();
     maybe_null= true;
     return res;
   }
-  const char *func_name() const { return "lpad_oracle"; }
+  const Schema *schema() const { return &oracle_schema_ref; }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_lpad_oracle>(thd, this); }
 };
