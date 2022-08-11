@@ -883,7 +883,7 @@ row_ins_foreign_fill_virtual(
 	const rec_offs*	offsets =
 		rec_get_offsets(rec, index, offsets_, index->n_core_fields,
 				ULINT_UNDEFINED, &cascade->heap);
-	TABLE*		mysql_table= NULL;
+	TABLE*		mysql_table= cascade->prebuilt->m_mysql_table;
 	upd_t*		update = cascade->update;
 	ulint		n_v_fld = index->table->n_v_def;
 	ulint		n_diff;
@@ -902,7 +902,7 @@ row_ins_foreign_fill_virtual(
 	}
 
 	ib_vcol_row vc(NULL);
-	uchar *record = vc.record(thd, index, &mysql_table);
+	uchar *record = vc.record(thd, index, mysql_table);
 	if (!record) {
 		return DB_OUT_OF_MEMORY;
 	}
@@ -992,6 +992,8 @@ row_ins_foreign_check_on_constraint(
 					index record in the child table */
 	dtuple_t*	entry,		/*!< in: index entry in the parent
 					table */
+	row_prebuilt_t* prebuilt,	/*!< in: referenced prebuilt for this
+					table */
 	mtr_t*		mtr)		/*!< in: mtr holding the latch of pcur
 					page */
 {
@@ -1051,13 +1053,14 @@ row_ins_foreign_check_on_constraint(
 	if (node->cascade_node == NULL) {
 		node->cascade_heap = mem_heap_create(128);
 		node->cascade_node = row_create_update_node_for_mysql(
-			table, node->cascade_heap);
+			table, node->cascade_heap, prebuilt);
 		que_node_set_parent(node->cascade_node, node);
 
 	}
 	cascade = node->cascade_node;
 	cascade->table = table;
 	cascade->foreign = foreign;
+	cascade->prebuilt = prebuilt;
 
 	if (node->is_delete
 	    && (foreign->type & DICT_FOREIGN_ON_DELETE_CASCADE)) {
@@ -1459,6 +1462,9 @@ row_ins_check_foreign_constraint(
 	dict_table_t*	table,	/*!< in: if check_ref is TRUE, then the foreign
 				table, else the referenced table */
 	dtuple_t*	entry,	/*!< in: index entry for index */
+	row_prebuilt_t* prebuilt,
+				/*!< in: referenced prebuilt for this table.
+				NULL if check_ref is TRUE */
 	que_thr_t*	thr)	/*!< in: query thread */
 {
 	dberr_t		err;
@@ -1746,7 +1752,7 @@ row_ins_check_foreign_constraint(
 
 					err = row_ins_foreign_check_on_constraint(
 						thr, foreign, &pcur, entry,
-						&mtr);
+						prebuilt, &mtr);
 					if (err != DB_SUCCESS) {
 						/* Since reporting a plain
 						"duplicate key" error
@@ -1983,7 +1989,7 @@ row_ins_check_foreign_constraints(
 			table from being dropped while the check is running. */
 
 			err = row_ins_check_foreign_constraint(
-				TRUE, foreign, table, ref_tuple, thr);
+				TRUE, foreign, table, ref_tuple, NULL, thr);
 
 			if (referenced_table) {
 				foreign->foreign_table->dec_fk_checks();
