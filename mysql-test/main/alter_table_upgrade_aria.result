@@ -1,0 +1,54 @@
+#
+# Start of 10.4 tests
+#
+#
+# MDEV-28727 ALTER TABLE ALGORITHM=NOCOPY does not work after upgrade
+#
+#
+# The original 10.1.4 Aria table does not support INSTANT and NOCOPY.
+# CHECK TABLE FOR UPGRADE doesn't report that upgrade is needed.
+# The table is not really broken!
+# Just the index on DOUBLE is a bit inefficient.
+#
+SHOW CREATE TABLE mdev28727_100104_aria;
+Table	Create Table
+mdev28727_100104_aria	CREATE TABLE `mdev28727_100104_aria` (
+  `d` double(18,7) DEFAULT NULL,
+  KEY `d` (`d`)
+) ENGINE=Aria DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci PAGE_CHECKSUM=1
+CHECK TABLE mdev28727_100104_aria FOR UPGRADE;
+Table	Op	Msg_type	Msg_text
+test.mdev28727_100104_aria	check	status	OK
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported for this operation. Try ALGORITHM=COPY
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=NOCOPY;
+ERROR 0A000: ALGORITHM=NOCOPY is not supported for this operation. Try ALGORITHM=COPY
+DROP TABLE mdev28727_100104_aria;
+#
+# REPAIR TABLE does not change anything, INSTANT and NOCOPY still do not work.
+# Again, the table is not really broken!
+# Just the index on DOUBLE is a bit inefficient.
+#
+REPAIR TABLE mdev28727_100104_aria;
+Table	Op	Msg_type	Msg_text
+test.mdev28727_100104_aria	repair	status	OK
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported for this operation. Try ALGORITHM=COPY
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=NOCOPY;
+ERROR 0A000: ALGORITHM=NOCOPY is not supported for this operation. Try ALGORITHM=COPY
+DROP TABLE mdev28727_100104_aria;
+#
+# ALTER TABLE FORCE rebuilds the table. INSTANT now works.
+#
+ALTER TABLE mdev28727_100104_aria FORCE;
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=INSTANT;
+DROP TABLE mdev28727_100104_aria;
+#
+# ALTER TABLE FORCE rebuilds the table. NOCOPY now works.
+#
+ALTER TABLE mdev28727_100104_aria FORCE;
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=NOCOPY;
+DROP TABLE mdev28727_100104_aria;
+#
+# End of 10.4 tests
+#

@@ -1,0 +1,71 @@
+--source include/have_aria.inc
+
+let $datadir=`select @@datadir`;
+
+--echo #
+--echo # Start of 10.4 tests
+--echo #
+
+--echo #
+--echo # MDEV-28727 ALTER TABLE ALGORITHM=NOCOPY does not work after upgrade
+--echo #
+
+--echo #
+--echo # The original 10.1.4 Aria table does not support INSTANT and NOCOPY.
+--echo # CHECK TABLE FOR UPGRADE doesn't report that upgrade is needed.
+--echo # The table is not really broken!
+--echo # Just the index on DOUBLE is a bit inefficient.
+--echo #
+
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.frm $datadir/test/mdev28727_100104_aria.frm;
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.MAD $datadir/test/mdev28727_100104_aria.MAD;
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.MAI $datadir/test/mdev28727_100104_aria.MAI;
+SHOW CREATE TABLE mdev28727_100104_aria;
+CHECK TABLE mdev28727_100104_aria FOR UPGRADE;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=INSTANT;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=NOCOPY;
+DROP TABLE mdev28727_100104_aria;
+
+--echo #
+--echo # REPAIR TABLE does not change anything, INSTANT and NOCOPY still do not work.
+--echo # Again, the table is not really broken!
+--echo # Just the index on DOUBLE is a bit inefficient.
+--echo #
+
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.frm $datadir/test/mdev28727_100104_aria.frm;
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.MAD $datadir/test/mdev28727_100104_aria.MAD;
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.MAI $datadir/test/mdev28727_100104_aria.MAI;
+REPAIR TABLE mdev28727_100104_aria;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=INSTANT;
+--error ER_ALTER_OPERATION_NOT_SUPPORTED
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=NOCOPY;
+DROP TABLE mdev28727_100104_aria;
+
+--echo #
+--echo # ALTER TABLE FORCE rebuilds the table. INSTANT now works.
+--echo #
+
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.frm $datadir/test/mdev28727_100104_aria.frm;
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.MAD $datadir/test/mdev28727_100104_aria.MAD;
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.MAI $datadir/test/mdev28727_100104_aria.MAI;
+ALTER TABLE mdev28727_100104_aria FORCE;
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=INSTANT;
+DROP TABLE mdev28727_100104_aria;
+
+--echo #
+--echo # ALTER TABLE FORCE rebuilds the table. NOCOPY now works.
+--echo #
+
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.frm $datadir/test/mdev28727_100104_aria.frm;
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.MAD $datadir/test/mdev28727_100104_aria.MAD;
+copy_file std_data/mysql_upgrade/mdev28727_100104_aria.MAI $datadir/test/mdev28727_100104_aria.MAI;
+ALTER TABLE mdev28727_100104_aria FORCE;
+ALTER TABLE mdev28727_100104_aria MODIFY d DOUBLE DEFAULT 10, ALGORITHM=NOCOPY;
+DROP TABLE mdev28727_100104_aria;
+
+--echo #
+--echo # End of 10.4 tests
+--echo #

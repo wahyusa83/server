@@ -174,6 +174,11 @@ public:
   Item *idx_cond_push(uint keyno, Item* idx_cond);
   bool rowid_filter_push(Rowid_filter* rowid_filter);
 
+  ulong key_pack_flags_supported() const
+  {
+    return HA_PACK_KEY | HA_BINARY_PACK_KEY;
+  }
+
 private:
   DsMrr_impl ds_mrr;
   friend check_result_t index_cond_func_myisam(void *arg);

@@ -5027,6 +5027,11 @@ public:
   /* If the table is using sql level unique constraints on some column */
   inline bool has_long_unique();
 
+  virtual ulong key_pack_flags_supported() const
+  {
+    return 0;
+  }
+
   /* Used for ALTER TABLE.
   Some engines can handle some differences in indexes by themself. */
   virtual Compare_keys compare_key_parts(const Field &old_field,

@@ -190,6 +190,11 @@ public:
   virtual S3_INFO *s3_open_args() { return 0; }
   virtual void register_handler(MARIA_HA *file) {}
 
+  ulong key_pack_flags_supported() const override
+  {
+    return HA_PACK_KEY | HA_BINARY_PACK_KEY;
+  }
+
 private:
   DsMrr_impl ds_mrr;
   friend check_result_t index_cond_func_maria(void *arg);

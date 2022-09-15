@@ -4309,7 +4309,21 @@ mysql_prepare_create_table(THD *thd, HA_CREATE_INFO *create_info,
           (key_part_length >= KEY_DEFAULT_PACK_LENGTH) &&
           !is_hash_field_needed)
       {
-        key_info->flags|= sql_field->type_handler()->KEY_pack_flags(column_nr);
+        const Type_handler *th= sql_field->type_handler();
+#ifndef DBUG_OFF
+        /*
+          10.4 bit-ORed decimals to Create_field::pack_flag
+          using FIELDFLAG_DEC_SHIFT left shift.
+        */
+        uint sql_field_pack_flag_104= sql_field->pack_flag |
+                                      (sql_field->decimals <<
+                                       FIELDFLAG_DEC_SHIFT);
+#endif
+        DBUG_EXECUTE_IF("emulate_pre_mdev_20704",
+                        if ((sql_field_pack_flag_104 & FIELDFLAG_BLOB) &&
+                            !f_is_blob(sql_field_pack_flag_104))
+                          th= &type_handler_blob; );
+        key_info->flags|= th->KEY_pack_flags(column_nr);
       }
       /* Check if the key segment is partial, set the key flag accordingly */
       if (key_part_length != sql_field->type_handler()->
@@ -7047,11 +7061,13 @@ Compare_keys compare_keys_but_name(const KEY *table_key, const KEY *new_key,
                                    const KEY *const new_pk,
                                    const KEY *const old_pk)
 {
-  if (table_key->algorithm != new_key->algorithm)
+  ulong key_flag_mask= HA_KEYFLAG_MASK |
+                       table->file->key_pack_flags_supported();
+
+  if ((table_key->flags & key_flag_mask) != (new_key->flags & key_flag_mask))
     return Compare_keys::NotEqual;
 
-  if ((table_key->flags & HA_KEYFLAG_MASK) !=
-      (new_key->flags & HA_KEYFLAG_MASK))
+  if (table_key->algorithm != new_key->algorithm)
     return Compare_keys::NotEqual;
 
   if (table_key->user_defined_key_parts != new_key->user_defined_key_parts)
