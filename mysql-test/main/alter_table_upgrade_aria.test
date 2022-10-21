@@ -1,0 +1,21 @@
+--source include/have_aria.inc
+
+--echo #
+--echo # Start of 10.4 tests
+--echo #
+
+--echo #
+--echo # MDEV-28727 ALTER TABLE ALGORITHM=NOCOPY does not work after upgrade
+--echo #
+
+let $table= std_data/mysql_upgrade/mdev28727_100104_aria;
+let $EXT_DAT= MAD;
+let $EXT_IDX= MAI;
+SET @debug_key_flags=NULL;
+SET default_storage_engine=ARIA;
+--source alter_table_upgrade_mdev28727_myisam_aria.inc
+
+
+--echo #
+--echo # End of 10.4 tests
+--echo #

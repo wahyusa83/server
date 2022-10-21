@@ -1,0 +1,17 @@
+--echo #
+--echo # Start of 10.4 tests
+--echo #
+
+--echo #
+--echo # MDEV-28727 ALTER TABLE ALGORITHM=NOCOPY does not work after upgrade
+--echo #
+
+let $table= std_data/mysql_upgrade/mdev28727_100104_myisam;
+let $EXT_DAT= MYD;
+let $EXT_IDX= MYI;
+SET @debug_key_flags=NULL;
+--source alter_table_upgrade_mdev28727_myisam_aria.inc
+
+--echo #
+--echo # End of 10.4 tests
+--echo #
