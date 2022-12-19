@@ -8001,7 +8001,7 @@ void TABLE::mark_default_fields_for_write(bool is_insert)
 }
 
 
-void TABLE::move_fields(Field **ptr, const uchar *to, const uchar *from)
+void TABLE::move_fields(Field **ptr, const uchar *to, const uchar *from) const
 {
   my_ptrdiff_t diff= to - from;
   if (diff)
@@ -8020,7 +8020,7 @@ void TABLE::move_fields(Field **ptr, const uchar *to, const uchar *from)
   records
 */
 
-void TABLE::remember_blob_values(String *blob_storage)
+void TABLE::remember_blob_values(String *blob_storage) const
 {
   Field **vfield_ptr;
   for (vfield_ptr= vfield; *vfield_ptr; vfield_ptr++)
@@ -8043,7 +8043,7 @@ void TABLE::remember_blob_values(String *blob_storage)
   records
 */
 
-void TABLE::restore_blob_values(String *blob_storage)
+void TABLE::restore_blob_values(String *blob_storage) const
 {
   Field **vfield_ptr;
   for (vfield_ptr= vfield; *vfield_ptr; vfield_ptr++)
@@ -8915,7 +8915,7 @@ int TABLE::update_virtual_fields(handler *h, enum_vcol_update_mode update_mode)
                                 that a calculation is internal and is not
                                 expected to fail.
 */
-int TABLE::update_virtual_field(Field *vf, bool ignore_warnings)
+int TABLE::update_virtual_field(Field *vf, bool ignore_warnings) const
 {
   DBUG_ENTER("TABLE::update_virtual_field");
   Query_arena backup_arena;
