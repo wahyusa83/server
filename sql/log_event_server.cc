@@ -7337,27 +7337,13 @@ Rows_log_event::write_row(rpl_group_info *rgi,
     DBUG_DUMP("record[0] (after)", table->record[0], table->s->reclength);
 
     COPY_INFO info;
-    auto result= replace_row(table, keynum, &info, invoke_triggers,
+    int error= replace_row(table, keynum, &info, invoke_triggers,
                              m_vers_from_plain &&
                                      m_table->versioned(VERS_TIMESTAMP));
 
     if (result.updated)
     {
-      switch (result.error)
-      {
-      case HA_ERR_RECORD_IS_THE_SAME:
-        DBUG_PRINT("info", ("ignoring HA_ERR_RECORD_IS_THE_SAME error from"
-                            " ha_update_row()"));
-        result.error= 0;
-        // fall through
-      case 0:
-        break;
-
-      default:
-        DBUG_PRINT("info", ("ha_update_row() returns error %d", result.error));
-        table->file->print_error(result.error, MYF(0));
-      }
-      DBUG_RETURN(result.error);
+      DBUG_RETURN(error);
     }
     if (result.error)
     {
