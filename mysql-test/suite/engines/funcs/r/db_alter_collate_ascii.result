@@ -217,6 +217,7 @@ utf8mb4_german2_ci	utf8mb4	244		#	#
 utf8mb4_croatian_mysql561_ci	utf8mb4	245		#	#
 utf8mb4_unicode_520_ci	utf8mb4	246		#	#
 utf8mb4_vietnamese_ci	utf8mb4	247		#	#
+utf8mb4_tolower_ci	utf8mb4	511		#	#
 utf8mb4_croatian_ci	utf8mb4	608		#	#
 utf8mb4_myanmar_ci	utf8mb4	609		#	#
 utf8mb4_thai_520_w2	utf8mb4	610		#	#

@@ -1055,10 +1055,10 @@ public:
     safe_charset_converter, return string representation of this function
     call
   */
-  virtual const char *fully_qualified_func_name() const = 0;
+  virtual const Lex_ident_func fully_qualified_func_name() const = 0;
   bool check_vcol_func_processor(void *arg)
   {
-    return mark_unsupported_function(fully_qualified_func_name(), arg,
+    return mark_unsupported_function(fully_qualified_func_name().str, arg,
                                      VCOL_SESSION_FUNC);
   }
   bool const_item() const;
@@ -1081,8 +1081,8 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("database") };
     return name;
   }
-  const char *fully_qualified_func_name() const override
-  { return "database()"; }
+  const Lex_ident_func fully_qualified_func_name() const override
+  { return "database()"_Lex_ident_func; }
   Item *get_copy(THD *thd) override
   { return get_item_copy<Item_func_database>(thd, this); }
 };
@@ -1098,8 +1098,8 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("SQLERRM") };
     return name;
   }
-  const char *fully_qualified_func_name() const override
-  { return "SQLERRM"; }
+  const Lex_ident_func fully_qualified_func_name() const override
+  { return "SQLERRM"_Lex_ident_func; }
   void print(String *str, enum_query_type query_type) override
   {
     str->append(func_name_cstring());
@@ -1143,8 +1143,8 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("user") };
     return name;
   }
-  const char *fully_qualified_func_name() const override
-  { return "user()"; }
+  const Lex_ident_func fully_qualified_func_name() const override
+  { return "user()"_Lex_ident_func; }
   int save_in_field(Field *field, bool no_conversions) override
   {
     return save_str_value_in_field(field, &str_value);
@@ -1167,12 +1167,12 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("current_user") };
     return name;
   }
-  const char *fully_qualified_func_name() const override
-  { return "current_user()"; }
+  const Lex_ident_func fully_qualified_func_name() const override
+  { return "current_user()"_Lex_ident_func; }
   bool check_vcol_func_processor(void *arg) override
   {
     context= 0;
-    return mark_unsupported_function(fully_qualified_func_name(), arg,
+    return mark_unsupported_function(fully_qualified_func_name().str, arg,
                                      VCOL_SESSION_FUNC);
   }
 };
@@ -1198,8 +1198,8 @@ public:
     static LEX_CSTRING name= {STRING_WITH_LEN("current_role") };
     return name;
   }
-  const char *fully_qualified_func_name() const override
-  { return "current_role()"; }
+  const Lex_ident_func fully_qualified_func_name() const override
+  { return "current_role()"_Lex_ident_func; }
   String *val_str(String *) override
   {
     DBUG_ASSERT(fixed());
@@ -1208,7 +1208,7 @@ public:
   bool check_vcol_func_processor(void *arg) override
   {
     context= 0;
-    return mark_unsupported_function(fully_qualified_func_name(), arg,
+    return mark_unsupported_function(fully_qualified_func_name().str, arg,
                                      VCOL_SESSION_FUNC);
   }
   Item *get_copy(THD *thd) override

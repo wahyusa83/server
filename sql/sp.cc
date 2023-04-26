@@ -2190,7 +2190,7 @@ Sp_handler::sp_find_package_routine(THD *thd,
                                     bool cache_only) const
 {
   DBUG_ENTER("sp_find_package_routine");
-  Database_qualified_name pkgname(&name->m_db, &pkgname_str);
+  Database_qualified_name pkgname(name->m_db, pkgname_str);
   sp_head *ph= sp_cache_lookup(&thd->sp_package_body_cache, &pkgname);
   if (!ph && !cache_only)
     sp_handler_package_body.db_find_and_cache_routine(thd, &pkgname, &ph);
@@ -2258,13 +2258,9 @@ Sp_handler::sp_exist_routines(THD *thd, TABLE_LIST *routines) const
   DBUG_ENTER("sp_exists_routine");
   for (routine= routines; routine; routine= routine->next_global)
   {
-    sp_name *name;
-    LEX_CSTRING lex_db;
-    LEX_CSTRING lex_name;
-    thd->make_lex_string(&lex_db, routine->db.str, routine->db.length);
-    thd->make_lex_string(&lex_name, routine->table_name.str,
-                         routine->table_name.length);
-    name= new sp_name(&lex_db, &lex_name, true);
+    Lex_ident_db lex_db= Lex_ident_db(thd->strmake_lex_cstring(routine->db));
+    LEX_CSTRING lex_name= thd->strmake_lex_cstring(routine->table_name);
+    sp_name *name= new sp_name(lex_db, lex_name, true);
     sp_object_found= sp_find_routine(thd, name, false) != NULL;
     thd->get_stmt_da()->clear_warning_info(thd->query_id);
     if (! sp_object_found)
@@ -2325,7 +2321,8 @@ bool sp_add_used_routine(Query_tables_list *prelocking_ctx, Query_arena *arena,
                          const Sp_handler *handler,
                          TABLE_LIST *belong_to_view)
 {
-  my_hash_init_opt(PSI_INSTRUMENT_ME, &prelocking_ctx->sroutines, system_charset_info,
+  my_hash_init_opt(PSI_INSTRUMENT_ME, &prelocking_ctx->sroutines,
+                   Lex_ident_func::charset_info(),
                    Query_tables_list::START_SROUTINES_HASH_SIZE,
                    0, 0, sp_sroutine_key, 0, 0);
 
@@ -2460,7 +2457,7 @@ is_package_body_routine(THD *thd, sp_package *pkg,
                         const LEX_CSTRING &name2,
                         enum_sp_type type)
 {
-  return Sp_handler::eq_routine_name(pkg->m_name, name1) &&
+  return Lex_ident_func(pkg->m_name).streq(name1) &&
          (pkg->m_routine_declarations.find(name2, type) ||
           pkg->m_routine_implementations.find(name2, type));
 }
@@ -2487,7 +2484,7 @@ bool Sp_handler::
     Rewrite name if name->m_db (xxx) is a known package,
     and name->m_name (yyy) is a known routine in this package.
   */
-  LEX_CSTRING tmpdb= thd->db;
+  const Lex_ident_db tmpdb= Lex_ident_db(thd->db);
   if (is_package_public_routine(thd, tmpdb, name->m_db, name->m_name, type()) ||
       // Check if a package routine calls a private routine
       (caller && caller->m_parent &&
@@ -2498,7 +2495,7 @@ bool Sp_handler::
        is_package_body_routine(thd, pkg, name->m_db, name->m_name, type())))
   {
     pkgname->m_db= tmpdb;
-    pkgname->m_name= name->m_db;
+    pkgname->m_name= Lex_ident_func(name->m_db);
     *pkg_routine_handler= package_routine_handler();
     return name->make_package_routine_name(thd->mem_root, tmpdb,
                                            name->m_db, name->m_name);
@@ -2554,7 +2551,7 @@ bool Sp_handler::
       - yyy() has a forward declaration
       - yyy() is declared in the corresponding CREATE PACKAGE
     */
-    if (eq_routine_name(tmpname, name->m_name) ||
+    if (Lex_ident_func(name->m_name).streq(tmpname) ||
         caller->m_parent->m_routine_implementations.find(name->m_name, type()) ||
         caller->m_parent->m_routine_declarations.find(name->m_name, type()) ||
         is_package_public_routine_quick(thd, caller->m_db,
@@ -2887,7 +2884,7 @@ Sp_handler::sp_cache_package_routine(THD *thd,
 {
   DBUG_ENTER("sp_cache_package_routine");
   DBUG_ASSERT(type() == SP_TYPE_FUNCTION || type() == SP_TYPE_PROCEDURE);
-  sp_name pkgname(&name->m_db, &pkgname_cstr, false);
+  sp_name pkgname(name->m_db, pkgname_cstr, false);
   sp_head *ph= NULL;
   int ret= sp_handler_package_body.sp_cache_routine(thd, &pkgname,
                                                     lookup_only,
@@ -3051,7 +3048,7 @@ Sp_handler::sp_load_for_information_schema(THD *thd, TABLE *proc_table,
   const AUTHID definer= {{STRING_WITH_LEN("")}, {STRING_WITH_LEN("")}};
   sp_head *sp;
   sp_cache **spc= get_cache(thd);
-  sp_name sp_name_obj(&db, &name, true); // This can change "name"
+  sp_name sp_name_obj(Lex_ident_db(db), name, true); // This can change "name"
   *free_sp_head= 0;
   if ((sp= sp_cache_lookup(spc, &sp_name_obj)))
   {

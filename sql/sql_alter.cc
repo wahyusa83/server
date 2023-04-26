@@ -283,7 +283,7 @@ Alter_table_ctx::Alter_table_ctx(THD *thd, TABLE_LIST *table_list,
   table_name= table_list->table_name;
   alias= (lower_case_table_names == 2) ? table_list->alias : table_name;
 
-  if (!new_db.str || !my_strcasecmp(table_alias_charset, new_db.str, db.str))
+  if (!new_db.str || new_db.streq(db))
     new_db= db;
 
   if (new_name.str)
@@ -307,7 +307,7 @@ Alter_table_ctx::Alter_table_ctx(THD *thd, TABLE_LIST *table_list,
       new_alias= new_name; // LCTN=0 => case sensitive + case preserving
 
     if (!is_database_changed() &&
-        !my_strcasecmp(table_alias_charset, new_name.str, table_name.str))
+        new_name.streq(table_name))
     {
       /*
         Source and destination table names are equal:

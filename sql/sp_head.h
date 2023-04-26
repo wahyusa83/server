@@ -113,7 +113,7 @@ class sp_name : public Sql_alloc,
 public:
   bool       m_explicit_name;                   /**< Prepend the db name? */
 
-  sp_name(const LEX_CSTRING *db, const LEX_CSTRING *name,
+  sp_name(const Lex_ident_db &db, const LEX_CSTRING &name,
           bool use_explicit_name)
     : Database_qualified_name(db, name), m_explicit_name(use_explicit_name)
   {
@@ -738,9 +738,9 @@ public:
     return false;
   }
   bool fill_spvar_definition(THD *thd, Column_definition *def,
-                             LEX_CSTRING *name)
+                             const Lex_ident_sp_var *name)
   {
-    def->field_name= *name;
+    def->field_name= Lex_ident_column(*name);
     return fill_spvar_definition(thd, def);
   }
 
@@ -752,7 +752,7 @@ private:
                                        Qualified_column_ident *ref)
   {
     spvar->field_def.set_column_type_ref(ref);
-    spvar->field_def.field_name= spvar->name;
+    spvar->field_def.field_name= Lex_ident_column(spvar->name);
     m_flags|= sp_head::HAS_COLUMN_TYPE_REFS;
   }
 
@@ -761,7 +761,7 @@ private:
                                                 Table_ident *ref)
   {
     spvar->field_def.set_table_rowtype_ref(ref);
-    spvar->field_def.field_name= spvar->name;
+    spvar->field_def.field_name= Lex_ident_column(spvar->name);
     fill_spvar_definition(thd, &spvar->field_def);
     m_flags|= sp_head::HAS_COLUMN_TYPE_REFS;
   }

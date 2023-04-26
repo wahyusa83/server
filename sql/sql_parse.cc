@@ -1132,8 +1132,8 @@ static bool wsrep_tables_accessible_when_detached(const TABLE_LIST *tables)
 {
   for (const TABLE_LIST *table= tables; table; table= table->next_global)
   {
-    LEX_CSTRING db= table->db, tn= table->table_name;
-    if (get_table_category(&db, &tn)  < TABLE_CATEGORY_INFORMATION)
+    if (get_table_category(table->db,
+                           table->table_name) < TABLE_CATEGORY_INFORMATION)
       return false;
   }
   return tables != NULL;
@@ -2817,8 +2817,8 @@ bool sp_process_definer(THD *thd)
     bool curuser= !strcmp(d->user.str, thd->security_ctx->priv_user);
     bool currole= !curuser && !strcmp(d->user.str, thd->security_ctx->priv_role);
     bool curuserhost= curuser && d->host.str &&
-                  !my_strcasecmp(system_charset_info, d->host.str,
-                                 thd->security_ctx->priv_host);
+                      Lex_ident_host(d->host).
+                        streq(Lex_cstring_strlen(thd->security_ctx->priv_host));
     if (!curuserhost && !currole &&
         check_global_access(thd, PRIV_DEFINER_CLAUSE, false))
       DBUG_RETURN(TRUE);
@@ -2827,7 +2827,7 @@ bool sp_process_definer(THD *thd)
   /* Check that the specified definer exists. Emit a warning if not. */
 
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
-  if (!is_acl_user(lex->definer->host.str, lex->definer->user.str))
+  if (!is_acl_user(lex->definer->host, lex->definer->user))
   {
     push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
                         ER_NO_SUCH_USER, ER_THD(thd, ER_NO_SUCH_USER),
@@ -3121,7 +3121,7 @@ mysql_create_routine(THD *thd, LEX *lex)
       which doesn't any check routine privileges,
       so no routine privilege record  will insert into mysql.procs_priv.
     */
-    if (thd->slave_thread && is_acl_user(definer->host.str, definer->user.str))
+    if (thd->slave_thread && is_acl_user(definer->host, definer->user))
     {
       security_context.change_security_context(thd, &thd->lex->definer->user,
                                                &thd->lex->definer->host,
@@ -3135,7 +3135,7 @@ mysql_create_routine(THD *thd, LEX *lex)
                              &lex->sphead->m_db, name,
                              Sp_handler::handler(lex->sql_command), 1))
     {
-      if (sp_grant_privileges(thd, lex->sphead->m_db.str, name->str,
+      if (sp_grant_privileges(thd, lex->sphead->m_db, *name,
                               Sp_handler::handler(lex->sql_command)))
         push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
                      ER_PROC_AUTO_GRANT_FAIL, ER_THD(thd, ER_PROC_AUTO_GRANT_FAIL));
@@ -5780,7 +5780,7 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
   case SQLCOM_SHOW_PACKAGE_BODY_CODE:
     {
 #ifndef DBUG_OFF
-      Database_qualified_name pkgname(&null_clex_str, &null_clex_str);
+      Database_qualified_name pkgname;
       sp_head *sp;
       const Sp_handler *sph= Sp_handler::handler(lex->sql_command);
       WSREP_SYNC_WAIT(thd, WSREP_SYNC_WAIT_BEFORE_SHOW);
@@ -6375,15 +6375,15 @@ static TABLE *find_temporary_table_for_rename(THD *thd,
   {
     TABLE_LIST *next= table->next_local;
 
-    if (!strcmp(table->get_db_name(),   cur_table->get_db_name()) &&
-        !strcmp(table->get_table_name(), cur_table->get_table_name()))
+    if (!strcmp(table->get_db_name().str,   cur_table->get_db_name().str) &&
+        !strcmp(table->get_table_name().str, cur_table->get_table_name().str))
     {
       /* Table was moved away, can't be same as 'table' */
       found= 1;
       res= 0;                      // Table can't be a temporary table
     }
-    if (!strcmp(next->get_db_name(),    cur_table->get_db_name()) &&
-        !strcmp(next->get_table_name(), cur_table->get_table_name()))
+    if (!strcmp(next->get_db_name().str,    cur_table->get_db_name().str) &&
+        !strcmp(next->get_table_name().str, cur_table->get_table_name().str))
     {
       /*
         Table has matching name with new name of this table. cur_table should
@@ -6613,7 +6613,7 @@ absent:
 
   if (sp_result != SP_KEY_NOT_FOUND &&
       sp_automatic_privileges && !opt_noacl &&
-      sp_revoke_privileges(thd, lex->spname->m_db.str, lex->spname->m_name.str,
+      sp_revoke_privileges(thd, lex->spname->m_db, lex->spname->m_name,
                            Sp_handler::handler(lex->sql_command)))
   {
     push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
@@ -7142,7 +7142,7 @@ check_table_access(THD *thd, privilege_t requirements, TABLE_LIST *tables,
     }
 
     if (check_access(thd, want_access,
-                     table_ref->get_db_name(),
+                     table_ref->get_db_name().str,
                      &table_ref->grant.privilege,
                      &table_ref->grant.m_internal,
                      0, no_errors))
@@ -7162,8 +7162,8 @@ check_routine_access(THD *thd, privilege_t want_access, const LEX_CSTRING *db,
   TABLE_LIST tables[1];
   
   bzero((char *)tables, sizeof(TABLE_LIST));
-  tables->db= *db;
-  tables->table_name= tables->alias= *name;
+  tables->db= Lex_ident_db(*db);
+  tables->table_name= tables->alias= Lex_ident_table(*name);
   
   /*
     The following test is just a shortcut for check_access() (to avoid
@@ -8163,7 +8163,6 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
 {
   TABLE_LIST *ptr;
   TABLE_LIST *UNINIT_VAR(previous_table_ref); /* The table preceding the current one. */
-  LEX_CSTRING alias_str;
   LEX *lex= thd->lex;
   DBUG_ENTER("add_table_to_list");
   DBUG_PRINT("enter", ("Table '%s' (%p)  Select %p (%u)",
@@ -8174,7 +8173,8 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
 
   if (unlikely(!table))
     DBUG_RETURN(0);				// End of memory
-  alias_str= alias ? *alias : table->table;
+  Lex_ident_table alias_str= alias ? Lex_ident_table(*alias) :
+                                     Lex_ident_table(table->table);
   DBUG_ASSERT(alias_str.str);
   if (!MY_TEST(table_options & TL_OPTION_ALIAS) &&
       unlikely(check_table_name(table->table.str, table->table.length, FALSE)))
@@ -8208,7 +8208,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
   if (table->db.str)
   {
     ptr->is_fqtn= TRUE;
-    ptr->db= table->db;
+    ptr->db= Lex_ident_db(table->db);
   }
   else if (!lex->with_cte_resolution && lex->copy_db_to(&ptr->db))
     DBUG_RETURN(0);
@@ -8226,7 +8226,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
       ptr->db.length= my_casedn_str(files_charset_info, (char*) ptr->db.str);
   }
 
-  ptr->table_name= table->table;
+  ptr->table_name= Lex_ident_table(table->table);
   ptr->lock_type= lock_type;
   ptr->mdl_type= mdl_type;
   ptr->table_options= table_options;
@@ -8251,7 +8251,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
     }
     ST_SCHEMA_TABLE *schema_table;
     schema_table= find_schema_table(thd, &ptr->table_name);
-    ptr->schema_table_name= ptr->table_name;
+    ptr->schema_table_name= Lex_ident_i_s_table(ptr->table_name);
     ptr->schema_table= schema_table;
   }
   ptr->select_lex= this;
@@ -8272,8 +8272,7 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
 	 tables ;
 	 tables=tables->next_local)
     {
-      if (unlikely(!my_strcasecmp(table_alias_charset, alias_str.str,
-                                  tables->alias.str) &&
+      if (unlikely(alias_str.streq(tables->alias) &&
                    (tables->db.str == any_db.str || ptr->db.str == any_db.str ||
                     !cmp(&ptr->db, &tables->db)) &&
                    !tables->sequence))
@@ -9660,12 +9659,12 @@ static TABLE_LIST *multi_delete_table_match(LEX *lex, TABLE_LIST *tbl,
     if (tbl->is_fqtn && elem->is_alias)
       continue; /* no match */
     if (tbl->is_fqtn && elem->is_fqtn)
-      res= (my_strcasecmp(table_alias_charset, tbl->table_name.str, elem->table_name.str) ||
+      res= (!tbl->table_name.streq(elem->table_name) ||
             cmp(&tbl->db, &elem->db));
     else if (elem->is_alias)
-      res= my_strcasecmp(table_alias_charset, tbl->alias.str, elem->alias.str);
+      res= !tbl->alias.streq(elem->alias);
     else
-      res= (my_strcasecmp(table_alias_charset, tbl->table_name.str, elem->table_name.str) ||
+      res= (!tbl->table_name.streq(elem->table_name) ||
             cmp(&tbl->db, &elem->db));
 
     if (res)

@@ -657,7 +657,8 @@ bool Item_func::eq(const Item *item, bool binary_cmp) const
       (func_type != Item_func::FUNC_SP &&
        func_name() != item_func->func_name()) ||
       (func_type == Item_func::FUNC_SP &&
-       my_strcasecmp(system_charset_info, func_name(), item_func->func_name())))
+       !Lex_ident_func(func_name_cstring()).
+         streq(item_func->func_name_cstring())))
     return 0;
   return Item_args::eq(item_func, binary_cmp);
 }

@@ -552,15 +552,13 @@ bool trans_rollback_stmt(THD *thd)
 
 /* Find a named savepoint in the current transaction. */
 static SAVEPOINT **
-find_savepoint(THD *thd, LEX_CSTRING name)
+find_savepoint(THD *thd, const Lex_ident_savepoint name)
 {
   SAVEPOINT **sv= &thd->transaction->savepoints;
 
   while (*sv)
   {
-    if (system_charset_info->strnncoll(
-                     (uchar *) name.str, name.length,
-                     (uchar *) (*sv)->name, (*sv)->length) == 0)
+    if (name.streq(Lex_cstring((*sv)->name, (*sv)->length)))
       break;
     sv= &(*sv)->prev;
   }
@@ -591,7 +589,7 @@ bool trans_savepoint(THD *thd, LEX_CSTRING name)
   if (thd->transaction->xid_state.check_has_uncommitted_xa())
     DBUG_RETURN(TRUE);
 
-  sv= find_savepoint(thd, name);
+  sv= find_savepoint(thd, Lex_ident_savepoint(name));
 
   if (*sv) /* old savepoint of the same name exists */
   {
@@ -655,7 +653,7 @@ bool trans_savepoint(THD *thd, LEX_CSTRING name)
 bool trans_rollback_to_savepoint(THD *thd, LEX_CSTRING name)
 {
   int res= FALSE;
-  SAVEPOINT *sv= *find_savepoint(thd, name);
+  SAVEPOINT *sv= *find_savepoint(thd, Lex_ident_savepoint(name));
   DBUG_ENTER("trans_rollback_to_savepoint");
 
   if (sv == NULL)
@@ -710,7 +708,7 @@ bool trans_rollback_to_savepoint(THD *thd, LEX_CSTRING name)
 bool trans_release_savepoint(THD *thd, LEX_CSTRING name)
 {
   int res= FALSE;
-  SAVEPOINT *sv= *find_savepoint(thd, name);
+  SAVEPOINT *sv= *find_savepoint(thd, Lex_ident_savepoint(name));
   DBUG_ENTER("trans_release_savepoint");
 
   if (sv == NULL)

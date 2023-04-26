@@ -29,6 +29,7 @@
 #include <mysql_com.h>                  /* USERNAME_LENGTH */
 #include "sql_bitmap.h"
 #include "lex_charset.h"
+#include "lex_ident.h"
 
 struct TABLE;
 class Type_handler;
@@ -122,7 +123,7 @@ typedef struct st_key {
   key_map overlapped;
   /* Set of keys constraint correlated with this key */
   key_map constraint_correlated;
-  LEX_CSTRING name;
+  Lex_ident_column name;
   uint  block_size;
   enum  ha_key_alg algorithm;
   /* 

@@ -31,8 +31,8 @@ bool Grant_privilege::add_column_privilege(THD *thd,
   class LEX_COLUMN *point;
   while ((point=iter++))
   {
-    if (!my_strcasecmp(system_charset_info,
-                       point->column.c_ptr(), new_str->c_ptr()))
+    const Lex_ident_column tmp(point->column.c_ptr(), point->column.length());
+    if (tmp.streq(new_str->to_lex_cstring()))
       break;
   }
   m_column_privilege_total|= which_grant;

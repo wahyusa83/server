@@ -1033,7 +1033,7 @@ public:
   */
   String str_value;
 
-  LEX_CSTRING name;			/* Name of item */
+  Lex_ident_column name;                  /* Name of item */
   /* Original item name (if it was renamed)*/
   const char *orig_name;
 
@@ -2428,8 +2428,8 @@ public:
 
   struct Check_table_name_prm
   {
-    LEX_CSTRING db;
-    LEX_CSTRING table_name;
+    const Lex_ident_db db;
+    const Lex_ident_table table_name;
     String field;
     Check_table_name_prm(LEX_CSTRING _db, LEX_CSTRING _table_name) :
       db(_db), table_name(_table_name) {}
@@ -2555,9 +2555,9 @@ public:
     return needs_charset_converter(1, tocs);
   }
   Item *const_charset_converter(THD *thd, CHARSET_INFO *tocs, bool lossless,
-                                const char *func_name);
+                                const Lex_ident_func &func_name);
   Item *const_charset_converter(THD *thd, CHARSET_INFO *tocs, bool lossless)
-  { return const_charset_converter(thd, tocs, lossless, NULL); }
+  { return const_charset_converter(thd, tocs, lossless, Lex_ident_func()); }
   void delete_self()
   {
     cleanup();
@@ -3499,17 +3499,17 @@ protected:
     updated during fix_fields() to values from Field object and life-time 
     of those is shorter than life-time of Item_field.
   */
-  LEX_CSTRING orig_db_name;
-  LEX_CSTRING orig_table_name;
-  LEX_CSTRING orig_field_name;
+  Lex_ident_db orig_db_name;
+  Lex_ident_table orig_table_name;
+  Lex_ident_column orig_field_name;
 
   void undeclared_spvar_error() const;
 
 public:
   Name_resolution_context *context;
-  LEX_CSTRING db_name;
-  LEX_CSTRING table_name;
-  LEX_CSTRING field_name;
+  Lex_ident_db db_name;
+  Lex_ident_table table_name;
+  Lex_ident_column field_name;
   /*
     Cached pointer to table which contains this field, used for the same reason
     by prep. stmt. too in case then we have not-fully qualified field.
@@ -3793,8 +3793,8 @@ public:
     {
       DBUG_ASSERT(p.db.length);
       if ((db_name.length &&
-          my_strcasecmp(table_alias_charset, p.db.str, db_name.str)) ||
-          my_strcasecmp(table_alias_charset, p.table_name.str, table_name.str))
+          !p.db.streq(db_name)) ||
+          !p.table_name.streq(table_name))
       {
         print(&p.field, (enum_query_type) (QT_ITEM_ORIGINAL_FUNC_NULLIF |
                                           QT_NO_DATA_EXPANSION |
@@ -4613,15 +4613,15 @@ public:
 
 class Item_static_float_func :public Item_float
 {
-  const char *func_name;
+  const Lex_ident_func func_name;
 public:
-  Item_static_float_func(THD *thd, const char *str, double val_arg,
+  Item_static_float_func(THD *thd, const Lex_ident_func &str, double val_arg,
                          uint decimal_par, uint length):
     Item_float(thd, NullS, val_arg, decimal_par, length), func_name(str)
   {}
   void print(String *str, enum_query_type) override
   {
-    str->append(func_name, strlen(func_name));
+    str->append(func_name);
   }
   Item *safe_charset_converter(THD *thd, CHARSET_INFO *tocs) override
   {
@@ -4818,14 +4818,14 @@ public:
 
 class Item_static_string_func :public Item_string
 {
-  const LEX_CSTRING func_name;
+  const Lex_ident_func func_name;
 public:
-  Item_static_string_func(THD *thd, const LEX_CSTRING &name_par,
+  Item_static_string_func(THD *thd, const Lex_ident_func &name_par,
                           const LEX_CSTRING &str, CHARSET_INFO *cs,
                           Derivation dv= DERIVATION_COERCIBLE):
     Item_string(thd, LEX_CSTRING({NullS,0}), str, cs, dv), func_name(name_par)
   {}
-  Item_static_string_func(THD *thd, const LEX_CSTRING &name_par,
+  Item_static_string_func(THD *thd, const Lex_ident_func &name_par,
                           const String *str,
                           CHARSET_INFO *tocs, uint *conv_errors,
                           Derivation dv, my_repertoire_t repertoire):
@@ -4834,7 +4834,7 @@ public:
   {}
   Item *safe_charset_converter(THD *thd, CHARSET_INFO *tocs) override
   {
-    return const_charset_converter(thd, tocs, true, func_name.str);
+    return const_charset_converter(thd, tocs, true, func_name);
   }
 
   void print(String *str, enum_query_type) override

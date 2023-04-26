@@ -381,7 +381,7 @@ class set_var_default_role: public set_var_base
 {
   LEX_USER *user, *real_user;
   LEX_CSTRING role;
-  const char *real_role;
+  LEX_CSTRING real_role;
 public:
   set_var_default_role(LEX_USER *user_arg, LEX_CSTRING role_arg) :
     user(user_arg), role(role_arg) {}
@@ -472,7 +472,7 @@ extern sys_var *Sys_autocommit_ptr, *Sys_last_gtid_ptr,
   *Sys_character_set_client_ptr, *Sys_character_set_connection_ptr,
   *Sys_character_set_results_ptr;
 
-CHARSET_INFO *get_old_charset_by_name(const char *old_name);
+CHARSET_INFO *get_old_charset_by_name(const LEX_CSTRING &name);
 
 int sys_var_init();
 uint sys_var_elements();

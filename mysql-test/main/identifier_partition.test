@@ -1,0 +1,49 @@
+--source include/have_partition.inc
+
+--echo #
+--echo # Start of 11.2 tests
+--echo #
+
+--echo #
+--echo # MDEV-31340 Remove MY_COLLATION_HANDLER::strcasecmp()
+--echo #
+
+#
+# Testing "U+0130 CAPITAL LETTER I WITH DOT ABOVE" versus letters I and i.
+# See comments on casefolding and octet length in identifier.test
+#
+
+SET NAMES utf8;
+
+--error ER_SAME_NAME_PARTITION
+CREATE TABLE t1
+(
+  a INT
+)
+PARTITION BY LIST (a)
+(
+  PARTITION I VALUES IN (0),
+  PARTITION İ DEFAULT
+);
+
+
+CREATE TABLE t1
+(
+  a INT
+)
+PARTITION BY LIST (a)
+(
+  PARTITION I0 VALUES IN (0),
+  PARTITION I1 VALUES IN (1),
+  PARTITION Id DEFAULT
+);
+SHOW CREATE TABLE t1;
+INSERT INTO t1 VALUES (0),(1),(2);
+SELECT * FROM t1 PARTITION (İ0);
+SELECT * FROM t1 PARTITION (İ1);
+SELECT * FROM t1 PARTITION (İd);
+DROP TABLE t1;
+
+--echo #
+--echo # End of 11.2 tests
+--echo #

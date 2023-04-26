@@ -118,7 +118,7 @@ int ha_partition::notify_tabledef_changed(LEX_CSTRING *db,
     LEX_CSTRING table_name;
     const char *table_name_ptr;
     if (create_partition_name(from_buff, sizeof(from_buff),
-                              from_path, name_buffer_ptr,
+                              from_path, Lex_cstring_strlen(name_buffer_ptr),
                               NORMAL_PART_NAME, FALSE))
       res=1;
     table_name_ptr= from_buff + dirname_length(from_buff);
@@ -830,9 +830,9 @@ int ha_partition::create(const char *name, TABLE *table_arg,
       {
         part_elem= sub_it++;
         if (unlikely((error= create_partition_name(name_buff,
-                                                   sizeof(name_buff), path,
-                                                   name_buffer_ptr,
-                                                   NORMAL_PART_NAME, FALSE))))
+                                            sizeof(name_buff), path,
+                                            Lex_cstring_strlen(name_buffer_ptr),
+                                            NORMAL_PART_NAME, FALSE))))
           goto create_error;
         if (unlikely((error= set_up_table_before_create(table_arg, name_buff,
                                                         create_info,
@@ -848,8 +848,9 @@ int ha_partition::create(const char *name, TABLE *table_arg,
     else
     {
       if (unlikely((error= create_partition_name(name_buff, sizeof(name_buff),
-                                                 path, name_buffer_ptr,
-                                                 NORMAL_PART_NAME, FALSE))))
+                                           path,
+                                           Lex_cstring_strlen(name_buffer_ptr),
+                                           NORMAL_PART_NAME, FALSE))))
         goto create_error;
       if (unlikely((error= set_up_table_before_create(table_arg, name_buff,
                                                       create_info,
@@ -869,7 +870,8 @@ create_error:
   for (abort_file= file, file= m_file; file < abort_file; file++)
   {
     if (!create_partition_name(name_buff, sizeof(name_buff), path,
-                               name_buffer_ptr, NORMAL_PART_NAME, FALSE))
+                               Lex_cstring_strlen(name_buffer_ptr),
+                               NORMAL_PART_NAME, FALSE))
       (void) (*file)->delete_table((const char*) name_buff);
     name_buffer_ptr= strend(name_buffer_ptr) + 1;
   }
@@ -1536,7 +1538,7 @@ int ha_partition::handle_opt_partitions(THD *thd, HA_CHECK_OPT *check_opt,
           sub_elem= subpart_it++;
           part= i * num_subparts + j;
           DBUG_PRINT("info", ("Optimize subpartition %u (%s)",
-                     part, sub_elem->partition_name));
+                     part, sub_elem->partition_name.str));
           if (unlikely((error= handle_opt_part(thd, check_opt, part, flag))))
           {
             /* print a line which partition the error belongs to */
@@ -1549,7 +1551,7 @@ int ha_partition::handle_opt_partitions(THD *thd, HA_CHECK_OPT *check_opt,
                               table_share->db.str, table->alias,
                               &opt_op_name[flag],
                               "Subpartition %s returned error",
-                              sub_elem->partition_name);
+                              sub_elem->partition_name.str);
             }
             /* reset part_state for the remaining partitions */
             do
@@ -1564,7 +1566,7 @@ int ha_partition::handle_opt_partitions(THD *thd, HA_CHECK_OPT *check_opt,
       else
       {
         DBUG_PRINT("info", ("Optimize partition %u (%s)", i,
-                            part_elem->partition_name));
+                            part_elem->partition_name.str));
         if (unlikely((error= handle_opt_part(thd, check_opt, i, flag))))
         {
           /* print a line which partition the error belongs to */
@@ -1575,7 +1577,7 @@ int ha_partition::handle_opt_partitions(THD *thd, HA_CHECK_OPT *check_opt,
 	    print_admin_msg(thd, MYSQL_ERRMSG_SIZE, &msg_error,
                             table_share->db.str, table->alias,
                             &opt_op_name[flag], "Partition %s returned error",
-                            part_elem->partition_name);
+                            part_elem->partition_name.str);
           }
           /* reset part_state for the remaining partitions */
           do
@@ -2494,15 +2496,17 @@ uint ha_partition::del_ren_table(const char *from, const char *to)
   do
   {
     if (unlikely((error= create_partition_name(from_buff, sizeof(from_buff),
-                                               from_path, name_buffer_ptr,
-                                               NORMAL_PART_NAME, FALSE))))
+                                            from_path,
+                                            Lex_cstring_strlen(name_buffer_ptr),
+                                            NORMAL_PART_NAME, FALSE))))
       goto rename_error;
 
     if (to != NULL)
     {                                           // Rename branch
       if (unlikely((error= create_partition_name(to_buff, sizeof(to_buff),
-                                                 to_path, name_buffer_ptr,
-                                                 NORMAL_PART_NAME, FALSE))))
+                                           to_path,
+                                           Lex_cstring_strlen(name_buffer_ptr),
+                                           NORMAL_PART_NAME, FALSE))))
         goto rename_error;
       error= (*file)->ha_rename_table(from_buff, to_buff);
       if (unlikely(error))
@@ -2558,9 +2562,11 @@ rename_error:
   {
     /* Revert the rename, back from 'to' to the original 'from' */
     if (!create_partition_name(from_buff, sizeof(from_buff), from_path,
-                               name_buffer_ptr, NORMAL_PART_NAME, FALSE) &&
+                               Lex_cstring_strlen(name_buffer_ptr),
+                               NORMAL_PART_NAME, FALSE) &&
         !create_partition_name(to_buff, sizeof(to_buff), to_path,
-                               name_buffer_ptr, NORMAL_PART_NAME, FALSE))
+                               Lex_cstring_strlen(name_buffer_ptr),
+                               NORMAL_PART_NAME, FALSE))
     {
       /* Ignore error here */
       (void) (*file)->ha_rename_table(to_buff, from_buff);
@@ -2669,7 +2675,7 @@ register_query_cache_dependant_tables(THD *thd,
   do
   {
     partition_element *part_elem= part_it++;
-    char *engine_pos= strmov(engine_key_end, part_elem->partition_name);
+    char *engine_pos= strmov(engine_key_end, part_elem->partition_name.str);
     if (m_is_sub_partitioned)
     {
       List_iterator<partition_element> subpart_it(part_elem->subpartitions);
@@ -2686,7 +2692,7 @@ register_query_cache_dependant_tables(THD *thd,
         sub_elem= subpart_it++;
         part= i * num_subparts + j;
         /* we store the end \0 as part of the key */
-        end= strmov(engine_pos, sub_elem->partition_name) + 1;
+        end= strmov(engine_pos, sub_elem->partition_name.str) + 1;
         length= (uint)(end - engine_key);
         /* Copy the suffix and end 0 to query cache key */
         memcpy(query_cache_key_end, engine_key_end, (end - engine_key_end));
@@ -2851,7 +2857,7 @@ bool ha_partition::create_handler_file(const char *name)
         part_elem->part_state != PART_TO_BE_ADDED &&
         part_elem->part_state != PART_CHANGED)
       continue;
-    tablename_to_filename(part_elem->partition_name, part_name,
+    tablename_to_filename(part_elem->partition_name.str, part_name,
                           FN_REFLEN);
     part_name_len= strlen(part_name);
     if (!m_is_sub_partitioned)
@@ -2865,7 +2871,7 @@ bool ha_partition::create_handler_file(const char *name)
       for (j= 0; j < m_part_info->num_subparts; j++)
       {
 	subpart_elem= sub_it++;
-        tablename_to_filename(subpart_elem->partition_name,
+        tablename_to_filename(subpart_elem->partition_name.str,
                               subpart_name,
                               FN_REFLEN);
 	subpart_name_len= strlen(subpart_name);
@@ -2909,7 +2915,7 @@ bool ha_partition::create_handler_file(const char *name)
       continue;
     if (!m_is_sub_partitioned)
     {
-      tablename_to_filename(part_elem->partition_name, part_name, FN_REFLEN);
+      tablename_to_filename(part_elem->partition_name.str, part_name, FN_REFLEN);
       name_buffer_ptr= strmov(name_buffer_ptr, part_name)+1;
       *engine_array= (uchar) ha_legacy_type(part_elem->engine_type);
       DBUG_PRINT("info", ("engine: %u", *engine_array));
@@ -2921,9 +2927,9 @@ bool ha_partition::create_handler_file(const char *name)
       for (j= 0; j < m_part_info->num_subparts; j++)
       {
 	subpart_elem= sub_it++;
-        tablename_to_filename(part_elem->partition_name, part_name,
+        tablename_to_filename(part_elem->partition_name.str, part_name,
                               FN_REFLEN);
-        tablename_to_filename(subpart_elem->partition_name, subpart_name,
+        tablename_to_filename(subpart_elem->partition_name.str, subpart_name,
                               FN_REFLEN);
 	name_buffer_ptr+= name_add(name_buffer_ptr,
 				   part_name,
@@ -3484,7 +3490,8 @@ bool ha_partition::populate_partition_name_hash()
   }
   tot_names= m_is_sub_partitioned ? m_tot_parts + num_parts : num_parts;
   if (my_hash_init(key_memory_Partition_share,
-                   &part_share->partition_name_hash, system_charset_info,
+                   &part_share->partition_name_hash,
+                   Lex_ident_partition::charset_info(),
                    tot_names, 0, 0, (my_hash_get_key) get_part_name, my_free,
                    HASH_UNIQUE))
   {
@@ -3498,7 +3505,7 @@ bool ha_partition::populate_partition_name_hash()
     DBUG_ASSERT(part_elem->part_state == PART_NORMAL);
     if (part_elem->part_state == PART_NORMAL)
     {
-      if (insert_partition_name_in_hash(part_elem->partition_name,
+      if (insert_partition_name_in_hash(part_elem->partition_name.str,
                                         i * num_subparts, false))
         goto err;
       if (m_is_sub_partitioned)
@@ -3510,7 +3517,7 @@ bool ha_partition::populate_partition_name_hash()
         do
         {
           sub_elem= subpart_it++;
-          if (insert_partition_name_in_hash(sub_elem->partition_name,
+          if (insert_partition_name_in_hash(sub_elem->partition_name.str,
                                             i * num_subparts + j, true))
             goto err;
 
@@ -3800,8 +3807,9 @@ int ha_partition::open(const char *name, int mode, uint test_if_locked)
       }
 
       if (unlikely((error= create_partition_name(name_buff, sizeof(name_buff),
-                                                 name, name_buffer_ptr,
-                                                 NORMAL_PART_NAME, FALSE))))
+                                           name,
+                                           Lex_cstring_strlen(name_buffer_ptr),
+                                           NORMAL_PART_NAME, FALSE))))
         goto err_handler;
       /* ::clone() will also set ha_share from the original. */
       if (!(m_file[i]= file[i]->clone(name_buff, m_clone_mem_root)))
@@ -4917,7 +4925,7 @@ int ha_partition::truncate_partition(Alter_info *alter_info, bool *binlog_stmt)
           sub_elem= subpart_it++;
           part= i * num_subparts + j;
           DBUG_PRINT("info", ("truncate subpartition %u (%s)",
-                              part, sub_elem->partition_name));
+                              part, sub_elem->partition_name.str));
           if (unlikely((error= m_file[part]->ha_truncate())))
             break;
           sub_elem->part_state= PART_NORMAL;
@@ -4926,7 +4934,7 @@ int ha_partition::truncate_partition(Alter_info *alter_info, bool *binlog_stmt)
       else
       {
         DBUG_PRINT("info", ("truncate partition %u (%s)", i,
-                            part_elem->partition_name));
+                            part_elem->partition_name.str));
         error= m_file[i]->ha_truncate();
       }
       part_elem->part_state= PART_NORMAL;
@@ -8829,7 +8837,8 @@ int ha_partition::open_read_partitions(char *name_buff, size_t name_buff_size)
       if (unlikely((error=
                     create_partition_name(name_buff, name_buff_size,
                                           table->s->normalized_path.str,
-                                          name_buffer_ptr, NORMAL_PART_NAME,
+                                          Lex_cstring_strlen(name_buffer_ptr),
+                                          NORMAL_PART_NAME,
                                           FALSE))))
         goto err_handler;
       if (!((*file)->ht->flags & HTON_CAN_READ_CONNECT_STRING_IN_PARTITION))

@@ -422,6 +422,7 @@ my_bool init_compiled_charsets(myf flags __attribute__((unused)))
   add_compiled_collation(&my_charset_utf8mb4_bin);
   add_compiled_collation(&my_charset_utf8mb4_general_nopad_ci);
   add_compiled_collation(&my_charset_utf8mb4_nopad_bin);
+  add_compiled_collation(&my_charset_utf8mb4_tolower_ci);
 #ifdef HAVE_UCA_COLLATIONS
   add_compiled_collation(&my_charset_utf8mb4_unicode_ci);
   add_compiled_collation(&my_charset_utf8mb4_german2_uca_ci);
