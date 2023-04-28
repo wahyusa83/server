@@ -141,7 +141,7 @@ Create_func_trt_trx_sees<X> Create_func_trt_trx_sees<X>::s_singleton;
 
 #define BUILDER(F) & F::s_singleton
 
-static Native_func_registry func_array[] =
+static const Native_func_registry func_array_vers[] =
 {
   { { C_STRING_WITH_LEN("TRT_BEGIN_TS") }, BUILDER(Create_func_trt<TR_table::FLD_BEGIN_TS>)},
   { { C_STRING_WITH_LEN("TRT_COMMIT_ID") }, BUILDER(Create_func_trt<TR_table::FLD_COMMIT_ID>)},
@@ -150,7 +150,6 @@ static Native_func_registry func_array[] =
   { { C_STRING_WITH_LEN("TRT_TRX_ID") }, BUILDER(Create_func_trt<TR_table::FLD_TRX_ID>)},
   { { C_STRING_WITH_LEN("TRT_TRX_SEES") }, BUILDER(Create_func_trt_trx_sees<Item_func_trt_trx_sees>)},
   { { C_STRING_WITH_LEN("TRT_TRX_SEES_EQ") }, BUILDER(Create_func_trt_trx_sees<Item_func_trt_trx_sees_eq>)},
-  { {0, 0}, NULL}
 };
 
 
@@ -165,7 +164,8 @@ static int versioning_plugin_init(void *p __attribute__ ((unused)))
 {
   DBUG_ENTER("versioning_plugin_init");
   // No need in locking since we so far single-threaded
-  int res= item_create_append(func_array);
+  int res= native_functions_hash.append(func_array_vers,
+                                        array_elements(func_array_vers));
   if (res)
   {
     my_message(ER_PLUGIN_IS_NOT_LOADED, "Can't append function array" , MYF(0));
@@ -178,7 +178,8 @@ static int versioning_plugin_init(void *p __attribute__ ((unused)))
 static int versioning_plugin_deinit(void *p __attribute__ ((unused)))
 {
   DBUG_ENTER("versioning_plugin_deinit");
-  (void) item_create_remove(func_array);
+  (void) native_functions_hash.remove(func_array_vers,
+                                      array_elements(func_array_vers));
   DBUG_RETURN(0);
 }
 
