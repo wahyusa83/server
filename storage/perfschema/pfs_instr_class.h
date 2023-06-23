@@ -265,6 +265,40 @@ struct PFS_table_share_key
   char m_hash_key[PFS_TABLESHARE_HASHKEY_SIZE];
   /** Length in bytes of @c m_hash_key. */
   uint m_key_length;
+
+  size_t available_length() const
+  {
+    return sizeof(m_hash_key) - m_key_length;
+  }
+  char *end()
+  {
+    return m_hash_key + m_key_length;
+  }
+  // Append and 0-terminate a string with an optional lower-case conversion
+  void append_opt_casedn_z(CHARSET_INFO *cs,
+                           const char *str, size_t length,
+                           bool casedn)
+  {
+    DBUG_ASSERT(length <= sizeof(m_hash_key)); // Expect valid db/tbl names
+    MY_STRCOPY_STATUS st;
+    size_t dst_length= available_length();
+    if (dst_length > 0)
+    {
+      dst_length--;
+      /*
+        The code below uses copy_fix() instead of memcpy() to make
+        sure we don't break a multi-byte character in the middle.
+      */
+      m_key_length+= (uint) (casedn ?
+                             cs->casedn(str, length, end(), dst_length) :
+                             cs->copy_fix(end(), dst_length,
+                                          str, length, length, &st));
+      m_hash_key[m_key_length++]= '\0';
+    }
+  }
+  void set(bool temporary,
+           const char *schema_name, size_t schema_name_length,
+           const char *table_name, size_t table_name_length);
 };
 
 /** Table index or 'key' */
