@@ -24,6 +24,7 @@
 #include "dur_prop.h"
 #include <waiting_threads.h>
 #include "sql_const.h"
+#include "lex_ident.h"
 #include <mysql/plugin_audit.h>
 #include "log.h"
 #include "rpl_tblmap.h"
@@ -1234,6 +1235,52 @@ public:
     if (likely((ptr= alloc_root(mem_root,size+gap))))
       memcpy(ptr,str,size);
     return ptr;
+  }
+
+  // Make a lower-cased copy of a string on mem_root
+  LEX_STRING lex_string_casedn_ident(const LEX_CSTRING &src)
+  {
+    return lex_string_casedn_root(mem_root, &my_charset_utf8mb3_general_ci,
+                                  src.str, src.length);
+  }
+  LEX_STRING lex_string_casedn_ident(const LEX_STRING &src)
+  {
+    return lex_string_casedn_ident(Lex_cstring(src.str, src.length));
+  }
+  LEX_CSTRING lex_cstring_casedn_ident(const LEX_CSTRING &src)
+  {
+    LEX_STRING res= lex_string_casedn_ident(src);
+    return {res.str, res.length};
+  }
+
+  // Make an optionally lower-cased copy of a string on mem_root
+  LEX_STRING lex_string_opt_casedn_ident(const LEX_CSTRING &src,
+                                         bool casedn)
+  {
+    return lex_string_opt_casedn_root(mem_root,
+                                      &my_charset_utf8mb3_general_ci,
+                                      src.str, src.length,
+                                      casedn);
+  }
+  LEX_CSTRING lex_cstring_opt_casedn_ident(const LEX_CSTRING &src,
+                                           bool casedn)
+  {
+    LEX_STRING res= lex_string_opt_casedn_ident(src, casedn);
+    return {res.str, res.length};
+  }
+
+  /*
+    Make an optionally lower-cased copy of a string,
+    according to lower_case_table_names.
+    If the source string is {NULL,0}, the result is also {NULL,0}.
+    Otherwise, a '\0' terminated string is returned.
+  */
+  Lex_ident_fs make_lex_ident_fs(const LEX_CSTRING &src)
+  {
+    if (!src.str)
+      return Lex_ident_fs(NULL, 0);
+    return Lex_ident_fs(lex_cstring_opt_casedn_ident(src,
+                                                     lower_case_table_names));
   }
 
   void set_query_arena(Query_arena *set);
@@ -6959,50 +7006,66 @@ typedef struct st_sort_buffer {
   SORT_FIELD *sortorder;
 } SORT_BUFFER;
 
-/* Structure for db & table in sql_yacc */
 
-class Table_ident :public Sql_alloc
+class Table_ident_basic
 {
 public:
   LEX_CSTRING db;
   LEX_CSTRING table;
+  Table_ident_basic(const LEX_CSTRING &db_arg,
+                     const LEX_CSTRING &table_arg)
+   :db(db_arg), table(table_arg)
+  { }
+  inline void change_db(LEX_CSTRING *db_name)
+  {
+    db= *db_name;
+  }
+  bool append_to(THD *thd, String *to) const;
+  bool casedn_append_to(THD *thd, String *to, bool casedn) const
+  {
+    if (!casedn)
+      return append_to(thd, to);
+    return Table_ident_basic(
+                   Casedn_ident_buffer<MAX_ALIAS_NAME>(db).to_lex_cstring(),
+                   Casedn_ident_buffer<MAX_ALIAS_NAME>(table).to_lex_cstring()).
+             append_to(thd, to);
+  }
+};
+
+
+/* Structure for db & table in sql_yacc */
+
+class Table_ident :public Sql_alloc, public Table_ident_basic
+{
+public:
   SELECT_LEX_UNIT *sel;
   inline Table_ident(THD *thd, const LEX_CSTRING *db_arg,
                      const LEX_CSTRING *table_arg,
 		     bool force)
-    :table(*table_arg), sel((SELECT_LEX_UNIT *)0)
+    :Table_ident_basic(*db_arg, *table_arg), sel((SELECT_LEX_UNIT *)0)
   {
     if (!force && (thd->client_capabilities & CLIENT_NO_SCHEMA))
       db= null_clex_str;
-    else
-      db= *db_arg;
   }
   inline Table_ident(const LEX_CSTRING *table_arg)
-    :table(*table_arg), sel((SELECT_LEX_UNIT *)0)
-  {
-    db= null_clex_str;
-  }
+    :Table_ident_basic(null_clex_str, *table_arg), sel((SELECT_LEX_UNIT *)0)
+  { }
   /*
     This constructor is used only for the case when we create a derived
     table. A derived table has no name and doesn't belong to any database.
     Later, if there was an alias specified for the table, it will be set
     by add_table_to_list.
   */
-  inline Table_ident(SELECT_LEX_UNIT *s) : sel(s)
+  inline Table_ident(SELECT_LEX_UNIT *s) :
+    Table_ident_basic(Lex_cstring(empty_c_string, (size_t) 0),
+                      Lex_cstring(internal_table_name, (size_t) 1)),
+    sel(s)
   {
     /* We must have a table name here as this is used with add_table_to_list */
-    db.str= empty_c_string;                    /* a subject to casedn_str */
-    db.length= 0;
-    table.str= internal_table_name;
-    table.length=1;
+    /* db and table are subject to casedn_str */
   }
   bool is_derived_table() const { return MY_TEST(sel); }
-  inline void change_db(LEX_CSTRING *db_name)
-  {
-    db= *db_name;
-  }
   bool resolve_table_rowtype_ref(THD *thd, Row_definition_list &defs);
-  bool append_to(THD *thd, String *to) const;
 };
 
 

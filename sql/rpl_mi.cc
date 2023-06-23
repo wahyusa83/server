@@ -55,16 +55,23 @@ Master_info::Master_info(LEX_CSTRING *connection_name_arg,
     Store connection name and lower case connection name
     It's safe to ignore any OMM errors as this is checked by error()
   */
-  connection_name.length= cmp_connection_name.length=
-    connection_name_arg->length;
+  connection_name.length= connection_name_arg->length;
+  size_t cmp_connection_name_nbytes= connection_name_arg->length *
+                                     system_charset_info->casedn_multiply() +
+                                     1;
   if ((connection_name.str= tmp= (char*)
-       my_malloc(PSI_INSTRUMENT_ME, connection_name_arg->length*2+2, MYF(MY_WME))))
+       my_malloc(PSI_INSTRUMENT_ME, connection_name_arg->length + 1 +
+                                    cmp_connection_name_nbytes,
+                 MYF(MY_WME))))
   {
     strmake(tmp, connection_name_arg->str, connection_name.length);
     tmp+= connection_name_arg->length+1;
     cmp_connection_name.str= tmp;
-    memcpy(tmp, connection_name_arg->str, connection_name.length+1);
-    my_casedn_str(system_charset_info, tmp);
+    cmp_connection_name.length=
+      system_charset_info->casedn(connection_name_arg->str,
+                                  connection_name_arg->length,
+                                  tmp, cmp_connection_name_nbytes - 1);
+    tmp[cmp_connection_name.length]= '\0';
   }
   /*
     When MySQL restarted, all Rpl_filter settings which aren't in the my.cnf
@@ -1369,20 +1376,15 @@ Master_info_index::get_master_info(const LEX_CSTRING *connection_name,
                                    Sql_condition::enum_warning_level warning)
 {
   Master_info *mi;
-  char buff[MAX_CONNECTION_NAME+1], *res;
-  size_t buff_length;
   DBUG_ENTER("get_master_info");
   DBUG_PRINT("enter",
              ("connection_name: '%.*s'", (int) connection_name->length,
               connection_name->str));
 
   /* Make name lower case for comparison */
-  res= strmake(buff, connection_name->str, connection_name->length);
-  my_casedn_str(system_charset_info, buff); 
-  buff_length= (size_t) (res-buff);
-
+  Casedn_ident_buffer<MAX_CONNECTION_NAME> buff(*connection_name);
   mi= (Master_info*) my_hash_search(&master_info_hash,
-                                    (uchar*) buff, buff_length);
+                                    (const uchar*) buff.str(), buff.length());
   if (!mi && warning != Sql_condition::WARN_LEVEL_NOTE)
   {
     my_error(WARN_NO_MASTER_INFO,

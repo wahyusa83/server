@@ -2044,8 +2044,8 @@ dispatch_command_return dispatch_command(enum enum_server_command command, THD *
     /* Must be before we init the table list. */
     if (lower_case_table_names)
     {
-      table_name.length= my_casedn_str(files_charset_info, table_name.str);
-      db.length= my_casedn_str(files_charset_info, (char*) db.str);
+      table_name= thd->lex_string_casedn_ident(table_name);
+      db= thd->lex_cstring_casedn_ident(db);
     }
     table_list.init_one_table(&db, (LEX_CSTRING*) &table_name, 0, TL_READ);
     /*
@@ -2623,19 +2623,14 @@ int prepare_schema_table(THD *thd, LEX *lex, Table_ident *table_ident,
       }
       schema_select_lex= new (thd->mem_root) SELECT_LEX();
       schema_select_lex->table_list.first= NULL;
-      if (lower_case_table_names == 1)
-        lex->first_select_lex()->db.str=
-          thd->strdup(lex->first_select_lex()->db.str);
-      schema_select_lex->db= lex->first_select_lex()->db;
-      /*
-        check_db_name() may change db.str if lower_case_table_names == 1,
-        but that's ok as the db is allocted above in this case.
-      */
-      if (check_db_name((LEX_STRING*) &lex->first_select_lex()->db))
-      {
-        my_error(ER_WRONG_DB_NAME, MYF(0), lex->first_select_lex()->db.str);
+
+      DBUG_ASSERT(lex->first_select_lex()->db.str);
+      Lex_ident_fs db_norm= thd->make_lex_ident_fs(lex->first_select_lex()->db);
+      if (!db_norm.str /*EOM*/ || db_norm.check_db_name_with_error())
         DBUG_RETURN(1);
-      }
+      lex->first_select_lex()->db= db_norm;
+
+      schema_select_lex->db= lex->first_select_lex()->db;
       break;
     }
 #endif
@@ -3050,11 +3045,8 @@ mysql_create_routine(THD *thd, LEX *lex)
     Verify that the database name is allowed, optionally
     lowercase it.
   */
-  if (check_db_name((LEX_STRING*) &lex->sphead->m_db))
-  {
-    my_error(ER_WRONG_DB_NAME, MYF(0), lex->sphead->m_db.str);
+  if (normalize_check_db_name_with_error(thd, &lex->sphead->m_db))
     return true;
-  }
 
   if (check_access(thd, CREATE_PROC_ACL, lex->sphead->m_db.str,
                    NULL, NULL, 0, 0))
@@ -3179,13 +3171,10 @@ wsrep_error_label:
   This can be done by testing thd->is_error().
 */
 static bool prepare_db_action(THD *thd, privilege_t want_access,
-                              LEX_CSTRING *dbname)
+                              const LEX_CSTRING &dbname)
 {
-  if (check_db_name((LEX_STRING*)dbname))
-  {
-    my_error(ER_WRONG_DB_NAME, MYF(0), dbname->str);
+  if (Lex_ident_fs(dbname).check_db_name_with_error())
     return true;
-  }
   /*
     If in a slave thread :
     - CREATE DATABASE DB was certainly not preceded by USE DB.
@@ -3200,8 +3189,8 @@ static bool prepare_db_action(THD *thd, privilege_t want_access,
   {
     Rpl_filter *rpl_filter;
     rpl_filter= thd->system_thread_info.rpl_sql_info->rpl_filter;
-    if (!rpl_filter->db_ok(dbname->str) ||
-        !rpl_filter->db_ok_with_wild_table(dbname->str))
+    if (!rpl_filter->db_ok(dbname.str) ||
+        !rpl_filter->db_ok_with_wild_table(dbname.str))
     {
       my_message(ER_SLAVE_IGNORED_TABLE,
                  ER_THD(thd, ER_SLAVE_IGNORED_TABLE), MYF(0));
@@ -3209,7 +3198,7 @@ static bool prepare_db_action(THD *thd, privilege_t want_access,
     }
   }
 #endif
-  return check_access(thd, want_access, dbname->str, NULL, NULL, 1, 0);
+  return check_access(thd, want_access, dbname.str, NULL, NULL, 1, 0);
 }
 
 
@@ -5173,43 +5162,51 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
     break;
   case SQLCOM_CREATE_DB:
   {
+    const Casedn_ident_buffer<SAFE_NAME_LEN> dbbuf(lex->name,
+                                                   lower_case_table_names);
+    const LEX_CSTRING db= dbbuf.to_lex_cstring();
     if (prepare_db_action(thd, lex->create_info.or_replace() ?
-                          (CREATE_ACL | DROP_ACL) : CREATE_ACL,
-                          &lex->name))
+                          (CREATE_ACL | DROP_ACL) : CREATE_ACL, db))
       break;
 
     if ((res= lex->create_info.resolve_to_charset_collation_context(thd,
                                  thd->charset_collation_context_create_db())))
       break;
 
-    WSREP_TO_ISOLATION_BEGIN(lex->name.str, NULL, NULL);
+    WSREP_TO_ISOLATION_BEGIN(db.str, NULL, NULL);
 
-    res= mysql_create_db(thd, &lex->name,
-                         lex->create_info, &lex->create_info);
+    res= mysql_create_db(thd, &db, lex->create_info, &lex->create_info);
     break;
   }
   case SQLCOM_DROP_DB:
   {
+    const Casedn_ident_buffer<SAFE_NAME_LEN> dbbuf(lex->name,
+                                                   lower_case_table_names);
+    const LEX_CSTRING db= dbbuf.to_lex_cstring();
     if (thd->variables.option_bits & OPTION_IF_EXISTS)
       lex->create_info.set(DDL_options_st::OPT_IF_EXISTS);
 
-    if (prepare_db_action(thd, DROP_ACL, &lex->name))
+    if (prepare_db_action(thd, DROP_ACL, db))
       break;
 
-    WSREP_TO_ISOLATION_BEGIN(lex->name.str, NULL, NULL);
+    WSREP_TO_ISOLATION_BEGIN(db.str, NULL, NULL);
 
-    res= mysql_rm_db(thd, &lex->name, lex->if_exists());
+    res= mysql_rm_db(thd, &db, lex->if_exists());
     break;
   }
   case SQLCOM_ALTER_DB_UPGRADE:
   {
-    LEX_CSTRING *db= &lex->name;
+    const Casedn_ident_buffer<SAFE_NAME_LEN> dbbuf(lex->name,
+                                                   lower_case_table_names);
+    if (dbbuf.check_db_name_with_error())
+      break;
+    const LEX_CSTRING db= dbbuf.to_lex_cstring();
 #ifdef HAVE_REPLICATION
     if (thd->slave_thread)
     {
       rpl_filter= thd->system_thread_info.rpl_sql_info->rpl_filter;
-      if (!rpl_filter->db_ok(db->str) ||
-          !rpl_filter->db_ok_with_wild_table(db->str))
+      if (!rpl_filter->db_ok(db.str) ||
+          !rpl_filter->db_ok_with_wild_table(db.str))
       {
         res= 1;
         my_message(ER_SLAVE_IGNORED_TABLE, ER_THD(thd, ER_SLAVE_IGNORED_TABLE), MYF(0));
@@ -5217,39 +5214,36 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
       }
     }
 #endif
-    if (check_db_name((LEX_STRING*) db))
-    {
-      my_error(ER_WRONG_DB_NAME, MYF(0), db->str);
-      break;
-    }
-    if (check_access(thd, ALTER_ACL, db->str, NULL, NULL, 1, 0) ||
-        check_access(thd, DROP_ACL, db->str, NULL, NULL, 1, 0) ||
-        check_access(thd, CREATE_ACL, db->str, NULL, NULL, 1, 0))
+    if (check_access(thd, ALTER_ACL, db.str, NULL, NULL, 1, 0) ||
+        check_access(thd, DROP_ACL, db.str, NULL, NULL, 1, 0) ||
+        check_access(thd, CREATE_ACL, db.str, NULL, NULL, 1, 0))
     {
       res= 1;
       break;
     }
 
-    WSREP_TO_ISOLATION_BEGIN(db->str, NULL, NULL);
+    WSREP_TO_ISOLATION_BEGIN(db.str, NULL, NULL);
 
-    res= mysql_upgrade_db(thd, db);
+    res= mysql_upgrade_db(thd, &db);
     if (!res)
       my_ok(thd);
     break;
   }
   case SQLCOM_ALTER_DB:
   {
-    LEX_CSTRING *db= &lex->name;
+    const Casedn_ident_buffer<SAFE_NAME_LEN> dbbuf(lex->name,
+                                                   lower_case_table_names);
+    const LEX_CSTRING db= dbbuf.to_lex_cstring();
     if (prepare_db_action(thd, ALTER_ACL, db))
       break;
 
     if ((res= lex->create_info.resolve_to_charset_collation_context(thd,
-                     thd->charset_collation_context_alter_db(lex->name.str))))
+                     thd->charset_collation_context_alter_db(db.str))))
       break;
 
-    WSREP_TO_ISOLATION_BEGIN(db->str, NULL, NULL);
+    WSREP_TO_ISOLATION_BEGIN(db.str, NULL, NULL);
 
-    res= mysql_alter_db(thd, db, &lex->create_info);
+    res= mysql_alter_db(thd, &db, &lex->create_info);
     break;
   }
   case SQLCOM_SHOW_CREATE_DB:
@@ -6484,21 +6478,15 @@ static bool generate_incident_event(THD *thd)
 static int __attribute__ ((noinline))
 show_create_db(THD *thd, LEX *lex)
 {
-  char db_name_buff[NAME_LEN+1];
-  LEX_CSTRING db_name;
   DBUG_EXECUTE_IF("4x_server_emul",
                   my_error(ER_UNKNOWN_ERROR, MYF(0)); return 1;);
 
-  db_name.str= db_name_buff;
-  db_name.length= lex->name.length;
-  strmov(db_name_buff, lex->name.str);
-
-  if (check_db_name((LEX_STRING*) &db_name))
-  {
-    my_error(ER_WRONG_DB_NAME, MYF(0), db_name.str);
+  Casedn_ident_buffer<SAFE_NAME_LEN> dbbuf(lex->name,
+                                           lower_case_table_names);
+  if (dbbuf.check_db_name_with_error())
     return 1;
-  }
-  return mysqld_show_create_db(thd, &db_name, &lex->name, lex->create_info);
+  LEX_CSTRING db= dbbuf.to_lex_cstring();
+  return mysqld_show_create_db(thd, &db, &lex->name, lex->create_info);
 }
 
 
@@ -7340,33 +7328,21 @@ bool check_fk_parent_table_access(THD *thd,
 
       if (fk_key->ref_db.str)
       {
-        if (!(db_name.str= (char *) thd->memdup(fk_key->ref_db.str,
-                                                fk_key->ref_db.length+1)))
+        Lex_ident_fs tmp= thd->make_lex_ident_fs(fk_key->ref_db);
+        if (!tmp.str || tmp.check_db_name_with_error())
           return true;
-        db_name.length= fk_key->ref_db.length;
-
-        // Check if database name is valid or not.
-        if (check_db_name((LEX_STRING*) &db_name))
-        {
-          my_error(ER_WRONG_DB_NAME, MYF(0), db_name.str);
-          return true;
-        }
+        db_name= tmp;
       }
       else
       {
         if (!thd->db.str)
         {
           DBUG_ASSERT(create_db);
-          db_name.length= strlen(create_db);
-          if (!(db_name.str= (char *) thd->memdup(create_db,
-                                                  db_name.length+1)))
+          Lex_ident_fs tmp= thd->make_lex_ident_fs(
+                                   Lex_cstring_strlen(create_db));
+          if (!tmp.str || tmp.check_db_name_with_error())
             return true;
-
-          if (check_db_name((LEX_STRING*) &db_name))
-          {
-            my_error(ER_WRONG_DB_NAME, MYF(0), db_name.str);
-            return true;
-          }
+          db_name= tmp;
         }
         else
         {
@@ -7376,14 +7352,10 @@ bool check_fk_parent_table_access(THD *thd,
       }
 
       // if lower_case_table_names is set then convert tablename to lower case.
-      if (lower_case_table_names)
-      {
-        char *name;
-        table_name.str= name= (char *) thd->memdup(fk_key->ref_table.str,
-                                                   fk_key->ref_table.length+1);
-        table_name.length= my_casedn_str(files_charset_info, name);
-        db_name.length= my_casedn_str(files_charset_info, (char*) db_name.str);
-      }
+      if (lower_case_table_names &&
+          !(table_name= thd->lex_cstring_casedn_ident(table_name)).str)
+        return true;
+
 
       parent_table.init_one_table(&db_name, &table_name, 0, TL_IGNORE);
 
@@ -8184,11 +8156,10 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
   }
 
   if (unlikely(table->is_derived_table() == FALSE && table->db.str &&
-               !(table_options & TL_OPTION_TABLE_FUNCTION) &&
-               check_db_name((LEX_STRING*) &table->db)))
+               !(table_options & TL_OPTION_TABLE_FUNCTION)))
   {
-    my_error(ER_WRONG_DB_NAME, MYF(0), table->db.str);
-    DBUG_RETURN(0);
+    if (normalize_check_db_name_with_error(thd, &table->db))
+      DBUG_RETURN(0);
   }
 
   if (!alias)                            /* Alias is case sensitive */
@@ -8220,10 +8191,9 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
   if (lower_case_table_names)
   {
     if (table->table.length)
-      table->table.length= my_casedn_str(files_charset_info,
-                                         (char*) table->table.str);
+      table->table= thd->lex_cstring_casedn_ident(table->table);
     if (ptr->db.length && ptr->db.str != any_db.str)
-      ptr->db.length= my_casedn_str(files_charset_info, (char*) ptr->db.str);
+      ptr->db= thd->lex_cstring_casedn_ident(ptr->db);
   }
 
   ptr->table_name= table->table;

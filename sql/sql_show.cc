@@ -4306,18 +4306,15 @@ bool get_lookup_field_values(THD *thd, COND *cond, bool fix_table_name_case,
 
   if (lower_case_table_names && !rc)
   {
-    /* 
-      We can safely do in-place upgrades here since all of the above cases
-      are allocating a new memory buffer for these strings.
-    */  
     if (lookup_field_values->db_value.str && lookup_field_values->db_value.str[0])
-      my_casedn_str(system_charset_info,
-                    (char*) lookup_field_values->db_value.str);
+      lookup_field_values->db_value= thd->lex_cstring_casedn_ident(
+                                       lookup_field_values->db_value);
+
     if (fix_table_name_case &&
         lookup_field_values->table_value.str &&
         lookup_field_values->table_value.str[0])
-      my_casedn_str(system_charset_info,
-                    (char*) lookup_field_values->table_value.str);
+      lookup_field_values->table_value= thd->lex_cstring_casedn_ident(
+                                          lookup_field_values->table_value);
   }
 
   return rc;
@@ -4556,10 +4553,15 @@ make_table_name_list(THD *thd, Dynamic_array<LEX_CSTRING*> *table_names,
     return (schema_tables_add(thd, table_names,
                               lookup_field_vals->table_value.str));
 
-  if (check_db_name((LEX_STRING*)db_name))
+  DBUG_ASSERT(db_name->str);
+  Lex_ident_fs db_ident= thd->make_lex_ident_fs(*db_name);
+  if (!db_ident.str)
+    return 1;/*EOM*/
+
+  if (db_ident.check_db_name())
     return 0; // Impossible TABLE_SCHEMA name
 
-  find_files_result res= find_files(thd, table_names, db_name, path,
+  find_files_result res= find_files(thd, table_names, &db_ident, path,
                                     &lookup_field_vals->table_value);
   if (res != FIND_FILES_OK)
   {
@@ -4980,7 +4982,8 @@ static int fill_schema_table_from_frm(THD *thd, TABLE *table,
   TABLE tbl;
   TABLE_LIST table_list;
   uint res= 0;
-  char db_name_buff[NAME_LEN + 1], table_name_buff[NAME_LEN + 1];
+  Casedn_ident_buffer<NAME_LEN> db_name_buff;
+  Casedn_ident_buffer<NAME_LEN> table_name_buff;
 
   bzero((char*) &table_list, sizeof(TABLE_LIST));
   bzero((char*) &tbl, sizeof(TABLE));
@@ -4995,12 +4998,9 @@ static int fill_schema_table_from_frm(THD *thd, TABLE *table,
       cache subsystems require normalized (lowercased) database and table
       names as input.
     */
-    strmov(db_name_buff, db_name->str);
-    strmov(table_name_buff, table_name->str);
-    table_list.db.length=         my_casedn_str(files_charset_info, db_name_buff);
-    table_list.table_name.length= my_casedn_str(files_charset_info, table_name_buff);
-    table_list.db.str= db_name_buff;
-    table_list.table_name.str= table_name_buff;
+    table_list.db= db_name_buff.copy_casedn(*db_name).to_lex_cstring();
+    table_list.table_name= table_name_buff.copy_casedn(*table_name).
+                             to_lex_cstring();
   }
   else
   {
@@ -10274,11 +10274,7 @@ TABLE_LIST *get_trigger_table(THD *thd, const sp_name *trg_name)
   if (!(table= (TABLE_LIST*) thd->alloc(sizeof(TABLE_LIST))))
     return NULL;
 
-  db= trg_name->m_db;
-
-  db.str= thd->strmake(db.str, db.length);
-  if (lower_case_table_names)
-    db.length= my_casedn_str(files_charset_info, (char*) db.str);
+  db= thd->lex_cstring_opt_casedn_ident(trg_name->m_db, lower_case_table_names);
 
   tbl_name.str= thd->strmake(tbl_name.str, tbl_name.length);
 

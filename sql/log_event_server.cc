@@ -231,24 +231,26 @@ static void inline slave_rows_error_report(enum loglevel level, int ha_error,
 #endif
 
 #if defined(HAVE_REPLICATION)
-static void set_thd_db(THD *thd, Rpl_filter *rpl_filter,
-                       const char *db, uint32 db_len)
+static void set_thd_rewritten_db(THD *thd, Rpl_filter *rpl_filter,
+                                 LEX_CSTRING new_db)
 {
-  char lcase_db_buf[NAME_LEN +1];
-  LEX_CSTRING new_db;
-  new_db.length= db_len;
-  if (lower_case_table_names == 1)
-  {
-    strmov(lcase_db_buf, db);
-    my_casedn_str(system_charset_info, lcase_db_buf);
-    new_db.str= lcase_db_buf;
-  }
-  else
-    new_db.str= db;
-  /* TODO WARNING this makes rewrite_db respect lower_case_table_names values
-   * for more info look MDEV-17446 */
   new_db.str= rpl_filter->get_rewrite_db(new_db.str, &new_db.length);
   thd->set_db(&new_db);
+}
+
+
+static void set_thd_db(THD *thd, Rpl_filter *rpl_filter,
+                       const LEX_CSTRING &db)
+{
+  /* TODO WARNING this makes rewrite_db respect lower_case_table_names values
+   * for more info look MDEV-17446 */
+  if (lower_case_table_names == 1)
+  {
+    set_thd_rewritten_db(thd, rpl_filter,
+                         Casedn_ident_buffer<NAME_LEN>(db).to_lex_cstring());
+  }
+  else
+    set_thd_rewritten_db(thd, rpl_filter, db);
 }
 #endif
 
@@ -1935,7 +1937,7 @@ int Query_log_event::do_apply_event(rpl_group_info *rgi,
     goto end;
   }
 
-  set_thd_db(thd, rpl_filter, db, db_len);
+  set_thd_db(thd, rpl_filter, Lex_cstring(db, db_len));
 
   /*
     Setting the character set and collation of the current database thd->db.
@@ -3117,7 +3119,7 @@ int Load_log_event::do_apply_event(NET* net, rpl_group_info *rgi,
   DBUG_ENTER("Load_log_event::do_apply_event");
 
   DBUG_ASSERT(thd->query() == 0);
-  set_thd_db(thd, rpl_filter, db, db_len);
+  set_thd_db(thd, rpl_filter, Lex_cstring(db, db_len));
   thd->clear_error(1);
 
   /* see Query_log_event::do_apply_event() and BUG#13360 */
@@ -3161,9 +3163,11 @@ int Load_log_event::do_apply_event(NET* net, rpl_group_info *rgi,
 
     TABLE_LIST tables;
     LEX_CSTRING db_name= { thd->strmake(thd->db.str, thd->db.length), thd->db.length };
-    if (lower_case_table_names)
-      my_casedn_str(system_charset_info, (char *)table_name);
-    LEX_CSTRING tbl_name=   { table_name, strlen(table_name) };
+    const LEX_CSTRING tbl_name_orig= Lex_cstring(table_name, table_name_len);
+    const LEX_CSTRING tbl_name=
+                         lower_case_table_names ?
+                         thd->lex_cstring_casedn_ident(tbl_name_orig) :
+                         thd->strmake_lex_cstring(tbl_name_orig);
     tables.init_one_table(&db_name, &tbl_name, 0, TL_WRITE);
     tables.updating= 1;
 
@@ -6838,12 +6842,19 @@ int Table_map_log_event::do_apply_event(rpl_group_info *rgi)
                                 NullS)))
     DBUG_RETURN(HA_ERR_OUT_OF_MEM);
 
-  db_mem_length= strmov(db_mem, m_dbnam) - db_mem;
-  tname_mem_length= strmov(tname_mem, m_tblnam) - tname_mem;
   if (lower_case_table_names)
   {
-    my_casedn_str(files_charset_info, (char*)tname_mem);
-    my_casedn_str(files_charset_info, (char*)db_mem);
+    db_mem_length= my_charset_utf8mb3_general_ci.casedn(m_dbnam, m_dblen,
+                                                        db_mem, NAME_LEN);
+    db_mem[db_mem_length]= '\0';
+    tname_mem_length= my_charset_utf8mb3_general_ci.casedn(m_tblnam, m_tbllen,
+                                                           tname_mem, NAME_LEN);
+    tname_mem[tname_mem_length]= '\0';
+  }
+  else
+  {
+    db_mem_length= strmov(db_mem, m_dbnam) - db_mem;
+    tname_mem_length= strmov(tname_mem, m_tblnam) - tname_mem;
   }
 
   /* call from mysql_client_binlog_statement() will not set rli->mi */

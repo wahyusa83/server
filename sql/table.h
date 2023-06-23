@@ -3314,7 +3314,17 @@ enum open_frm_error open_table_def(THD *thd, TABLE_SHARE *share,
 void open_table_error(TABLE_SHARE *share, enum open_frm_error error,
                       int db_errno);
 void update_create_info_from_table(HA_CREATE_INFO *info, TABLE *form);
-bool check_db_name(LEX_STRING *db);
+
+LEX_CSTRING normalize_check_db_name_with_error(THD *thd, const LEX_CSTRING &db);
+static inline bool normalize_check_db_name_with_error(THD *thd, LEX_CSTRING *db)
+{
+  LEX_CSTRING tmp= normalize_check_db_name_with_error(thd, *db);
+  if (!tmp.str)
+    return true;
+  *db= tmp;
+  return false;
+}
+
 bool check_column_name(const char *name);
 bool check_period_name(const char *name);
 bool check_table_name(const char *name, size_t length, bool check_for_path_chars);

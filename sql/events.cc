@@ -825,7 +825,7 @@ Events::fill_schema_events(THD *thd, TABLE_LIST *tables, COND * /* cond */)
 {
   const char *db= NULL;
   int ret;
-  char db_tmp[SAFE_NAME_LEN];
+  Casedn_ident_buffer<SAFE_NAME_LEN> dbbuf;
   DBUG_ENTER("Events::fill_schema_events");
 
   /*
@@ -844,12 +844,12 @@ Events::fill_schema_events(THD *thd, TABLE_LIST *tables, COND * /* cond */)
   */
   if (thd->lex->sql_command == SQLCOM_SHOW_EVENTS)
   {
-    LEX_CSTRING *lexdb= &thd->lex->first_select_lex()->db;
+    const LEX_CSTRING *lexdb= &thd->lex->first_select_lex()->db;
     DBUG_ASSERT(lexdb);
     if (!is_infoschema_db(lexdb) && !is_perfschema_db(lexdb) &&
         check_access(thd, EVENT_ACL, lexdb->str, NULL, NULL, 0, 0))
       DBUG_RETURN(1);
-    db= normalize_db_name(lexdb->str, db_tmp, sizeof(db_tmp));
+    db= lower_case_table_names ? dbbuf.copy_casedn(*lexdb).str() : lexdb->str;
   }
   ret= db_repository->fill_schema_events(thd, tables, db);
 

@@ -7101,10 +7101,6 @@ longlong Item_func_nextval::val_int()
 
 void Item_func_nextval::print(String *str, enum_query_type query_type)
 {
-  char d_name_buff[MAX_ALIAS_NAME], t_name_buff[MAX_ALIAS_NAME];
-  LEX_CSTRING d_name= table_list->db;
-  LEX_CSTRING t_name= table_list->table_name;
-  bool use_db_name= d_name.str && d_name.str[0];
   THD *thd= current_thd;                        // Don't trust 'table'
 
   str->append(func_name_cstring());
@@ -7115,25 +7111,9 @@ void Item_func_nextval::print(String *str, enum_query_type query_type)
     the current db.
   */
 
-  if (lower_case_table_names > 0)
-  {
-    strmake(t_name_buff, t_name.str, MAX_ALIAS_NAME-1);
-    t_name.length= my_casedn_str(files_charset_info, t_name_buff);
-    t_name.str= t_name_buff;
-    if (use_db_name)
-    {
-      strmake(d_name_buff, d_name.str, MAX_ALIAS_NAME-1);
-      d_name.length= my_casedn_str(files_charset_info, d_name_buff);
-      d_name.str= d_name_buff;
-    }
-  }
+  Table_ident_basic(table_list->db, table_list->table_name).
+    casedn_append_to(thd, str, lower_case_table_names);
 
-  if (use_db_name)
-  {
-    append_identifier(thd, str, &d_name);
-    str->append('.');
-  }
-  append_identifier(thd, str, &t_name);
   str->append(')');
 }
 
@@ -7225,10 +7205,6 @@ longlong Item_func_setval::val_int()
 
 void Item_func_setval::print(String *str, enum_query_type query_type)
 {
-  char d_name_buff[MAX_ALIAS_NAME], t_name_buff[MAX_ALIAS_NAME];
-  LEX_CSTRING d_name= table_list->db;
-  LEX_CSTRING t_name= table_list->table_name;
-  bool use_db_name= d_name.str && d_name.str[0];
   THD *thd= current_thd;                        // Don't trust 'table'
 
   str->append(func_name_cstring());
@@ -7239,25 +7215,9 @@ void Item_func_setval::print(String *str, enum_query_type query_type)
     the current db.
   */
 
-  if (lower_case_table_names > 0)
-  {
-    strmake(t_name_buff, t_name.str, MAX_ALIAS_NAME-1);
-    t_name.length= my_casedn_str(files_charset_info, t_name_buff);
-    t_name.str= t_name_buff;
-    if (use_db_name)
-    {
-      strmake(d_name_buff, d_name.str, MAX_ALIAS_NAME-1);
-      d_name.length= my_casedn_str(files_charset_info, d_name_buff);
-      d_name.str= d_name_buff;
-    }
-  }
+  Table_ident_basic(table_list->db, table_list->table_name).
+    casedn_append_to(thd, str, lower_case_table_names);
 
-  if (use_db_name)
-  {
-    append_identifier(thd, str, &d_name);
-    str->append('.');
-  }
-  append_identifier(thd, str, &t_name);
   str->append(',');
   str->append_longlong(nextval);
   str->append(',');

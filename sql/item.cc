@@ -3263,7 +3263,7 @@ LEX_CSTRING Item_ident::full_name_cstring() const
 void Item_ident::print(String *str, enum_query_type query_type)
 {
   THD *thd= current_thd;
-  char d_name_buff[MAX_ALIAS_NAME], t_name_buff[MAX_ALIAS_NAME];
+  Casedn_ident_buffer<MAX_ALIAS_NAME> d_name_buff, t_name_buff;
   LEX_CSTRING d_name= db_name;
   LEX_CSTRING t_name= table_name;
   bool use_table_name= table_name.str && table_name.str[0];
@@ -3310,17 +3310,9 @@ void Item_ident::print(String *str, enum_query_type query_type)
       (lower_case_table_names == 2 && !alias_name_used))
   {
     if (use_table_name)
-    {
-      strmov(t_name_buff, table_name.str);
-      my_casedn_str(files_charset_info, t_name_buff);
-      t_name= Lex_cstring_strlen(t_name_buff);
-    }
+      t_name= t_name_buff.copy_casedn(table_name).to_lex_cstring();
     if (use_db_name)
-    {
-      strmov(d_name_buff, db_name.str);
-      my_casedn_str(files_charset_info, d_name_buff);
-      d_name= Lex_cstring_strlen(d_name_buff);
-    }
+      d_name= d_name_buff.copy_casedn(db_name).to_lex_cstring();
   }
 
   if (use_db_name)
@@ -5343,7 +5335,7 @@ static Item** find_field_in_group_list(Item *find_item, ORDER *group_list)
   LEX_CSTRING field_name;
   ORDER      *found_group= NULL;
   int         found_match_degree= 0;
-  char        name_buff[SAFE_NAME_LEN+1];
+  Casedn_ident_buffer<SAFE_NAME_LEN> name_buff;
 
   if (find_item->type() == Item::FIELD_ITEM ||
       find_item->type() == Item::REF_ITEM)
@@ -5358,9 +5350,7 @@ static Item** find_field_in_group_list(Item *find_item, ORDER *group_list)
   if (db_name.str && lower_case_table_names)
   {
     /* Convert database to lower case for comparison */
-    strmake_buf(name_buff, db_name.str);
-    my_casedn_str(files_charset_info, name_buff);
-    db_name= Lex_cstring_strlen(name_buff);
+    db_name= name_buff.copy_casedn(db_name).to_lex_cstring();
   }
 
   DBUG_ASSERT(field_name.str != 0);

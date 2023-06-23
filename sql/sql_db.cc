@@ -744,8 +744,10 @@ mysql_create_db_internal(THD *thd, const LEX_CSTRING *db,
     DBUG_RETURN(-1);
   }
 
-  char db_tmp[SAFE_NAME_LEN+1];
-  const char *dbnorm= normalize_db_name(db->str, db_tmp, sizeof(db_tmp));
+  Casedn_ident_buffer<SAFE_NAME_LEN> dbbuf;
+  const char *dbnorm= lower_case_table_names ?
+                      dbbuf.copy_casedn(*db).str() :
+                      db->str;
 
   if (lock_schema_name(thd, dbnorm))
     DBUG_RETURN(-1);
@@ -1047,16 +1049,15 @@ mysql_rm_db_internal(THD *thd, const LEX_CSTRING *db, bool if_exists,
   TABLE_LIST *table;
   DDL_LOG_STATE ddl_log_state;
   Drop_table_error_handler err_handler;
-  LEX_CSTRING rm_db;
-  char db_tmp[SAFE_NAME_LEN+1];
-  const char *dbnorm;
+  Casedn_ident_buffer<SAFE_NAME_LEN> dbbuf;
+  const LEX_CSTRING rm_db= lower_case_table_names ?
+                           dbbuf.copy_casedn(*db).to_lex_cstring() :
+                           *db;
   DBUG_ENTER("mysql_rm_db");
 
-  dbnorm= normalize_db_name(db->str, db_tmp, sizeof(db_tmp));
-  lex_string_set(&rm_db, dbnorm);
   bzero(&ddl_log_state, sizeof(ddl_log_state));
 
-  if (lock_schema_name(thd, dbnorm))
+  if (lock_schema_name(thd, rm_db.str))
     DBUG_RETURN(true);
 
   path_length= build_table_filename(path, sizeof(path) - 1, db->str, "", "", 0);
@@ -1079,7 +1080,7 @@ mysql_rm_db_internal(THD *thd, const LEX_CSTRING *db, bool if_exists,
     }
   }
 
-  if (find_db_tables_and_rm_known_files(thd, dirp, dbnorm, path, &tables))
+  if (find_db_tables_and_rm_known_files(thd, dirp, rm_db.str, path, &tables))
     goto exit;
 
   /*
@@ -1097,7 +1098,7 @@ mysql_rm_db_internal(THD *thd, const LEX_CSTRING *db, bool if_exists,
   /* Lock all tables and stored routines about to be dropped. */
   if (lock_table_names(thd, tables, NULL, thd->variables.lock_wait_timeout,
                        0) ||
-      lock_db_routines(thd, dbnorm))
+      lock_db_routines(thd, rm_db))
     goto exit;
 
   if (!rm_mysql_schema)
@@ -1340,17 +1341,16 @@ static bool find_db_tables_and_rm_known_files(THD *thd, MY_DIR *dirp,
     if (!table_list)
       DBUG_RETURN(true);
     table_list->db= db;
-    table_list->table_name= *table;
-    table_list->open_type= OT_BASE_ONLY;
-
     /*
       On the case-insensitive file systems table is opened
       with the lowercased file name. So we should lowercase
       as well to look up the cache properly.
     */
-    if (lower_case_file_system)
-      table_list->table_name.length= my_casedn_str(files_charset_info,
-                                                   (char*) table_list->table_name.str);
+    table_list->table_name= lower_case_file_system ?
+                            thd->lex_cstring_casedn_ident(*table) :
+                            *table;
+
+    table_list->open_type= OT_BASE_ONLY;
 
     table_list->alias= table_list->table_name;	// If lower_case_table_names=2
     MDL_REQUEST_INIT(&table_list->mdl_request, MDL_key::TABLE,
@@ -1697,7 +1697,7 @@ static void backup_current_db_name(THD *thd,
 uint mysql_change_db(THD *thd, const LEX_CSTRING *new_db_name,
                      bool force_switch)
 {
-  LEX_CSTRING new_db_file_name;
+  Lex_ident_fs new_db_file_name;
 
   Security_context *sctx= thd->security_ctx;
   privilege_t db_access(sctx->db_access);
@@ -1739,16 +1739,7 @@ uint mysql_change_db(THD *thd, const LEX_CSTRING *new_db_name,
     goto done;
   }
 
-  /*
-    Now we need to make a copy because check_db_name requires a
-    non-constant argument. Actually, it takes database file name.
-
-    TODO: fix check_db_name().
-  */
-
-  new_db_file_name.str= my_strndup(key_memory_THD_db, new_db_name->str,
-                                   new_db_name->length, MYF(MY_WME));
-  new_db_file_name.length= new_db_name->length;
+  new_db_file_name= thd->make_lex_ident_fs(*new_db_name);
 
   if (new_db_file_name.str == NULL)
     DBUG_RETURN(ER_OUT_OF_RESOURCES);                             /* the error is set */
@@ -1763,11 +1754,8 @@ uint mysql_change_db(THD *thd, const LEX_CSTRING *new_db_name,
     The cast below ok here as new_db_file_name was just allocated
   */
 
-  if (check_db_name((LEX_STRING*) &new_db_file_name))
+  if (new_db_file_name.check_db_name_with_error())
   {
-    my_error(ER_WRONG_DB_NAME, MYF(0), new_db_file_name.str);
-    my_free(const_cast<char*>(new_db_file_name.str));
-
     if (force_switch)
       mysql_change_db_impl(thd, NULL, NO_ACL, thd->variables.collation_server);
 
@@ -1797,7 +1785,6 @@ uint mysql_change_db(THD *thd, const LEX_CSTRING *new_db_name,
              new_db_file_name.str);
     general_log_print(thd, COM_INIT_DB, ER_THD(thd, ER_DBACCESS_DENIED_ERROR),
                       sctx->priv_user, sctx->priv_host, new_db_file_name.str);
-    my_free(const_cast<char*>(new_db_file_name.str));
     DBUG_RETURN(ER_DBACCESS_DENIED_ERROR);
   }
 #endif
@@ -1814,8 +1801,6 @@ uint mysql_change_db(THD *thd, const LEX_CSTRING *new_db_name,
                           ER_BAD_DB_ERROR, ER_THD(thd, ER_BAD_DB_ERROR),
                           new_db_file_name.str);
 
-      my_free(const_cast<char*>(new_db_file_name.str));
-
       /* Change db to NULL. */
 
       mysql_change_db_impl(thd, NULL, NO_ACL, thd->variables.collation_server);
@@ -1828,7 +1813,6 @@ uint mysql_change_db(THD *thd, const LEX_CSTRING *new_db_name,
       /* Report an error and free new_db_file_name. */
 
       my_error(ER_BAD_DB_ERROR, MYF(0), new_db_file_name.str);
-      my_free(const_cast<char*>(new_db_file_name.str));
 
       /* The operation failed. */
 
@@ -1843,7 +1827,19 @@ uint mysql_change_db(THD *thd, const LEX_CSTRING *new_db_name,
 
   db_default_cl= get_default_db_collation(thd, new_db_file_name.str);
 
-  mysql_change_db_impl(thd, &new_db_file_name, db_access, db_default_cl);
+  /*
+     new_db_file_name allocated memory on thd->mem_root.
+     mysql_change_db_impl() expects a my_alloc-ed memory.
+  */
+  if (const char *tmp= my_strndup(key_memory_THD_db,
+                                  new_db_file_name.str,
+                                  new_db_file_name.length, MYF(MY_WME)))
+  {
+    LEX_CSTRING new_db_malloced({tmp, new_db_file_name.length});
+    mysql_change_db_impl(thd, &new_db_malloced, db_access, db_default_cl);
+  }
+  else
+    DBUG_RETURN(ER_OUT_OF_RESOURCES); /* the error is set */
 
 done:
   thd->session_tracker.current_schema.mark_as_changed(thd);
@@ -2144,15 +2140,4 @@ bool check_db_dir_existence(const char *db_name)
     dbname_cache->insert(db_name);
   mysql_rwlock_unlock(&rmdir_lock);
   return ret;
-}
-
-
-const char *normalize_db_name(const char *db, char *buffer, size_t buffer_size)
-{
-  DBUG_ASSERT(buffer_size > 1);
-  if (!lower_case_table_names)
-    return db;
-  strmake(buffer, db, buffer_size - 1);
-  my_casedn_str(system_charset_info, buffer);
-  return buffer;
 }

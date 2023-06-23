@@ -8308,7 +8308,7 @@ void Database_qualified_name::copy(MEM_ROOT *mem_root,
 }
 
 
-bool Table_ident::append_to(THD *thd, String *str) const
+bool Table_ident_basic::append_to(THD *thd, String *str) const
 {
   return (db.length &&
           (append_identifier(thd, str, db.str, db.length) ||

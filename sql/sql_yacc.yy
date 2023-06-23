@@ -15472,12 +15472,7 @@ user_maybe_role:
               MYSQL_YYABORT;
             if ($$->host.str[0])
             {
-              /*
-                Convert hostname part of username to lowercase.
-                It's OK to use in-place lowercase as long as
-                the character set is utf8.
-              */
-              my_casedn_str(system_charset_info, (char*) $$->host.str);
+              $$->host= thd->lex_cstring_casedn_ident($$->host);
             }
             else
             {

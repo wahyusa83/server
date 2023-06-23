@@ -2562,7 +2562,11 @@ Create_qfunc::create_func(THD *thd, const LEX_CSTRING *name,
   if (thd->lex->copy_db_to(&db))
     return NULL;
 
-  return create_with_db(thd, &db, name, false, item_list);
+  Lex_ident_fs db_ident= thd->make_lex_ident_fs(db);
+  if (!db_ident.str)
+    return NULL; /*EOM*/
+
+  return create_with_db(thd, &db_ident, name, false, item_list);
 }
 
 
@@ -2692,6 +2696,7 @@ Create_sp_func::create_with_db(THD *thd,
   sp_name *qname;
   const Sp_handler *sph= &sp_handler_function;
   Database_qualified_name pkgname(&null_clex_str, &null_clex_str);
+  DBUG_ASSERT(!Lex_ident_fs(*db).check_db_name_quick());
 
   if (unlikely(has_named_parameters(item_list)))
   {

@@ -1736,7 +1736,7 @@ public:
          cases.
  */
 
-bool lock_db_routines(THD *thd, const char *db)
+bool lock_db_routines(THD *thd, const LEX_CSTRING &db)
 {
   TABLE *table;
   uint key_len;
@@ -1745,7 +1745,7 @@ bool lock_db_routines(THD *thd, const char *db)
   uchar keybuf[MAX_KEY_LENGTH];
   DBUG_ENTER("lock_db_routines");
 
-  DBUG_SLOW_ASSERT(ok_for_lower_case_names(db));
+  DBUG_SLOW_ASSERT(ok_for_lower_case_names(db.str));
 
   start_new_trans new_trans(thd);
 
@@ -1768,7 +1768,7 @@ bool lock_db_routines(THD *thd, const char *db)
     DBUG_RETURN(thd->is_error() || thd->killed);
   }
 
-  table->field[MYSQL_PROC_FIELD_DB]->store(db, strlen(db), system_charset_info);
+  table->field[MYSQL_PROC_FIELD_DB]->store(db, system_charset_info);
   key_len= table->key_info->key_part[0].store_length;
   table->field[MYSQL_PROC_FIELD_DB]->get_key_image(keybuf, key_len, Field::itRAW);
   int nxtres= table->file->ha_index_init(0, 1);
@@ -1794,7 +1794,7 @@ bool lock_db_routines(THD *thd, const char *db)
                                                  sp_type);
       if (!sph)
         sph= &sp_handler_procedure;
-      MDL_REQUEST_INIT(mdl_request, sph->get_mdl_type(), db, sp_name,
+      MDL_REQUEST_INIT(mdl_request, sph->get_mdl_type(), db.str, sp_name,
                         MDL_EXCLUSIVE, MDL_TRANSACTION);
       mdl_requests.push_front(mdl_request);
     } while (! (nxtres= table->file->ha_index_next_same(table->record[0], keybuf, key_len)));
@@ -1811,7 +1811,7 @@ bool lock_db_routines(THD *thd, const char *db)
   /* We should already hold a global IX lock and a schema X lock. */
   DBUG_ASSERT(thd->mdl_context.is_lock_owner(MDL_key::BACKUP, "", "",
                                              MDL_BACKUP_DDL) &&
-              thd->mdl_context.is_lock_owner(MDL_key::SCHEMA, db, "",
+              thd->mdl_context.is_lock_owner(MDL_key::SCHEMA, db.str, "",
                                              MDL_EXCLUSIVE));
   DBUG_RETURN(thd->mdl_context.acquire_locks(&mdl_requests,
                                              thd->variables.lock_wait_timeout));
@@ -2259,9 +2259,10 @@ Sp_handler::sp_exist_routines(THD *thd, TABLE_LIST *routines) const
   for (routine= routines; routine; routine= routine->next_global)
   {
     sp_name *name;
-    LEX_CSTRING lex_db;
+    Lex_ident_fs lex_db= thd->make_lex_ident_fs(routine->db);
+    if (!lex_db.str)
+      DBUG_RETURN(TRUE); // EOM
     LEX_CSTRING lex_name;
-    thd->make_lex_string(&lex_db, routine->db.str, routine->db.length);
     thd->make_lex_string(&lex_name, routine->table_name.str,
                          routine->table_name.length);
     name= new sp_name(&lex_db, &lex_name, true);
@@ -2887,7 +2888,10 @@ Sp_handler::sp_cache_package_routine(THD *thd,
 {
   DBUG_ENTER("sp_cache_package_routine");
   DBUG_ASSERT(type() == SP_TYPE_FUNCTION || type() == SP_TYPE_PROCEDURE);
-  sp_name pkgname(&name->m_db, &pkgname_cstr, false);
+  Lex_ident_fs db= thd->make_lex_ident_fs(name->m_db);
+  if (!db.str)
+    DBUG_RETURN(true); // EOM
+  sp_name pkgname(&db, &pkgname_cstr, false);
   sp_head *ph= NULL;
   int ret= sp_handler_package_body.sp_cache_routine(thd, &pkgname,
                                                     lookup_only,
@@ -3051,7 +3055,16 @@ Sp_handler::sp_load_for_information_schema(THD *thd, TABLE *proc_table,
   const AUTHID definer= {{STRING_WITH_LEN("")}, {STRING_WITH_LEN("")}};
   sp_head *sp;
   sp_cache **spc= get_cache(thd);
-  sp_name sp_name_obj(&db, &name, true); // This can change "name"
+  DBUG_ASSERT(db.str);
+  Lex_ident_fs db_ident= thd->make_lex_ident_fs(db);
+  if (!db_ident.str)
+    return 0; // EOM
+  if (db_ident.check_db_name())
+  {
+    my_error(ER_SP_WRONG_NAME, MYF(0), db_ident.str);
+    return 0;
+  }
+  sp_name sp_name_obj(&db_ident, &name, true);
   *free_sp_head= 0;
   if ((sp= sp_cache_lookup(spc, &sp_name_obj)))
   {

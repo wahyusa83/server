@@ -896,6 +896,26 @@ static inline char *safe_strdup_root(MEM_ROOT *root, const char *str)
 extern char *strmake_root(MEM_ROOT *root,const char *str,size_t len);
 extern void *memdup_root(MEM_ROOT *root,const void *str, size_t len);
 extern LEX_CSTRING safe_lexcstrdup_root(MEM_ROOT *root, const LEX_CSTRING str);
+extern LEX_STRING lex_string_casedn_root(MEM_ROOT *root,
+                                        CHARSET_INFO *cs,
+                                        const char *str, size_t length);
+static inline LEX_STRING lex_string_opt_casedn_root(MEM_ROOT *root,
+                                                    CHARSET_INFO *cs,
+                                                    const char *str,
+                                                    size_t length,
+                                                    my_bool casedn)
+{
+  if (casedn)
+    return lex_string_casedn_root(root, cs, str, length);
+  else
+  {
+    LEX_STRING res;
+    res.str= strmake_root(root, str, length);
+    res.length= res.str ? length : 0;
+    return res;
+  }
+}
+
 extern my_bool my_compress(uchar *, size_t *, size_t *);
 extern my_bool my_uncompress(uchar *, size_t , size_t *);
 extern uchar *my_compress_alloc(const uchar *packet, size_t *len,

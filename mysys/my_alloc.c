@@ -621,3 +621,20 @@ LEX_CSTRING safe_lexcstrdup_root(MEM_ROOT *root, const LEX_CSTRING str)
   res.length= str.length;
   return res;
 }
+
+
+LEX_STRING lex_string_casedn_root(MEM_ROOT *root, CHARSET_INFO *cs,
+                                  const char *str, size_t length)
+{
+  size_t nbytes;
+  LEX_STRING res= {0, 0};
+  DBUG_ASSERT(str || !length);
+  if (!str)
+    return res;
+  nbytes= length * cs->cset->casedn_multiply(cs);
+  if (!(res.str= alloc_root(root, nbytes + 1)))
+    return res;
+  res.length= cs->cset->casedn(cs, str, length, res.str, nbytes);
+  res.str[res.length]= '\0';
+  return res;
+}
