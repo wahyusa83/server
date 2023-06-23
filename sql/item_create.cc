@@ -68,8 +68,8 @@ class Create_sp_func : public Create_qfunc
 {
 public:
   virtual Item *create_with_db(THD *thd,
-                               const LEX_CSTRING *db,
-                               const LEX_CSTRING *name,
+                               const Lex_ident_db_normalized &db,
+                               const LEX_CSTRING &name,
                                bool use_explicit_name, List<Item> *item_list);
 
   static Create_sp_func s_singleton;
@@ -2615,8 +2615,6 @@ Item*
 Create_qfunc::create_func(THD *thd, const LEX_CSTRING *name,
                           List<Item> *item_list)
 {
-  LEX_CSTRING db;
-
   if (unlikely(! thd->db.str && ! thd->lex->sphead))
   {
     /*
@@ -2635,10 +2633,11 @@ Create_qfunc::create_func(THD *thd, const LEX_CSTRING *name,
     return NULL;
   }
 
-  if (thd->lex->copy_db_to(&db))
-    return NULL;
+  Lex_ident_db_normalized db= thd->lex->copy_db_normalized();
+  if (!db.str)
+    return NULL; /*No db or EOM*/
 
-  return create_with_db(thd, &db, name, false, item_list);
+  return create_with_db(thd, db, *name, false, item_list);
 }
 
 
@@ -2758,8 +2757,8 @@ Create_sp_func Create_sp_func::s_singleton;
 
 Item*
 Create_sp_func::create_with_db(THD *thd,
-                               const LEX_CSTRING *db,
-                               const LEX_CSTRING *name,
+                               const Lex_ident_db_normalized &db,
+                               const LEX_CSTRING &name,
                                bool use_explicit_name, List<Item> *item_list)
 {
   int arg_count= 0;
@@ -2780,7 +2779,7 @@ Create_sp_func::create_with_db(THD *thd,
       because it can refer to a User Defined Function call.
       For a Stored Function however, this has no semantic.
     */
-    my_error(ER_WRONG_PARAMETERS_TO_STORED_FCT, MYF(0), name->str);
+    my_error(ER_WRONG_PARAMETERS_TO_STORED_FCT, MYF(0), name.str);
     return NULL;
   }
 

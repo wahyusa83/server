@@ -3769,20 +3769,15 @@ int group_concat_key_cmp_with_order_with_nulls(void *arg, const void *key1_arg,
 }
 
 
-static void report_cut_value_error(THD *thd, uint row_count, const char *fname)
+static void report_cut_value_error(THD *thd, uint row_count,
+                                   const LEX_CSTRING &fname)
 {
-  size_t fn_len= strlen(fname);
-  char *fname_upper= (char *) my_alloca(fn_len + 1);
-  if (!fname_upper)
-    fname_upper= (char*) fname;                 // Out of memory
-  else
-    memcpy(fname_upper, fname, fn_len+1);
-  my_caseup_str(&my_charset_latin1, fname_upper);
+  CharBuffer<NAME_LEN> fname_upper;
+  fname_upper.copy_caseup(&my_charset_latin1, fname);
   push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                       ER_CUT_VALUE_GROUP_CONCAT,
                       ER_THD(thd, ER_CUT_VALUE_GROUP_CONCAT),
-                      row_count, fname_upper);
-  my_afree(fname_upper);
+                      row_count, fname_upper.ptr());
 }
 
 
@@ -3885,7 +3880,7 @@ int dump_leaf_key(void* key_arg, element_count count __attribute__((unused)),
     THD *thd= current_thd;
     item->cut_max_length(result, old_length, max_length);
     item->warning_for_row= TRUE;
-    report_cut_value_error(thd, item->row_count, item->func_name());
+    report_cut_value_error(thd, item->row_count, item->func_name_cstring());
 
     /**
        To avoid duplicated warnings in Item_func_group_concat::val_str()
@@ -4479,7 +4474,7 @@ String* Item_func_group_concat::val_str(String* str)
       table->blob_storage->is_truncated_value())
   {
     warning_for_row= true;
-    report_cut_value_error(current_thd, row_count, func_name());
+    report_cut_value_error(current_thd, row_count, func_name_cstring());
   }
 
   return &result;

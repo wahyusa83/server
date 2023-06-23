@@ -267,8 +267,7 @@ public:
     void print(String *str, enum_query_type query_type) override
     {
       StringBuffer<FbtImpl::max_char_length()+64> tmp;
-      tmp.append(singleton()->name().lex_cstring());
-      my_caseup_str(&my_charset_latin1, tmp.c_ptr());
+      tmp.copy_caseup(&my_charset_latin1, singleton()->name().lex_cstring());
       str->append(tmp);
       str->append('\'');
       m_value.to_string(&tmp);
