@@ -894,8 +894,36 @@ static inline char *safe_strdup_root(MEM_ROOT *root, const char *str)
   return str ? strdup_root(root, str) : 0;
 }
 extern char *strmake_root(MEM_ROOT *root,const char *str,size_t len);
+/*
+  Returns:
+  - LEX_STRING{NULL,0} in case of LEX_STRING{NULL,0} input.
+  - Otherwise, a 0-terminated copy of {str, length}.
+*/
+extern LEX_STRING lex_string_strmake_root(MEM_ROOT *root,
+                                          const char *str,
+                                          size_t length);
 extern void *memdup_root(MEM_ROOT *root,const void *str, size_t len);
 extern LEX_CSTRING safe_lexcstrdup_root(MEM_ROOT *root, const LEX_CSTRING str);
+
+/*
+  Returns:
+  - LEX_STRING{NULL,0} in case of LEX_STRING{NULL,0} input.
+  - Otherwise, a 0-terminated lower-cased copy of {str, length}.
+*/
+extern LEX_STRING lex_string_casedn_root(MEM_ROOT *root,
+                                        CHARSET_INFO *cs,
+                                        const char *str, size_t length);
+static inline LEX_STRING lex_string_opt_casedn_root(MEM_ROOT *root,
+                                                    CHARSET_INFO *cs,
+                                                    const char *str,
+                                                    size_t length,
+                                                    my_bool casedn)
+{
+  DBUG_ASSERT(str || !length);
+  return casedn ? lex_string_casedn_root(root, cs, str, length) :
+                  lex_string_strmake_root(root, str, length);
+}
+
 extern my_bool my_compress(uchar *, size_t *, size_t *);
 extern my_bool my_uncompress(uchar *, size_t , size_t *);
 extern uchar *my_compress_alloc(const uchar *packet, size_t *len,

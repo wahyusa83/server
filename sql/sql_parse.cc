@@ -2616,26 +2616,15 @@ int prepare_schema_table(THD *thd, LEX *lex, Table_ident *table_ident,
     DBUG_RETURN(1);
 #else
     {
-      if (lex->first_select_lex()->db.str == NULL &&
-          lex->copy_db_to(&lex->first_select_lex()->db))
+      if (lex->first_select_lex()->db.str == NULL ?
+          lex->copy_db_to(&lex->first_select_lex()->db) :
+          thd->normalize_db_name_with_error(&lex->first_select_lex()->db))
       {
         DBUG_RETURN(1);
       }
       schema_select_lex= new (thd->mem_root) SELECT_LEX();
       schema_select_lex->table_list.first= NULL;
-      if (lower_case_table_names == 1)
-        lex->first_select_lex()->db.str=
-          thd->strdup(lex->first_select_lex()->db.str);
       schema_select_lex->db= lex->first_select_lex()->db;
-      /*
-        check_db_name() may change db.str if lower_case_table_names == 1,
-        but that's ok as the db is allocted above in this case.
-      */
-      if (check_db_name((LEX_STRING*) &lex->first_select_lex()->db))
-      {
-        my_error(ER_WRONG_DB_NAME, MYF(0), lex->first_select_lex()->db.str);
-        DBUG_RETURN(1);
-      }
       break;
     }
 #endif
@@ -3050,11 +3039,8 @@ mysql_create_routine(THD *thd, LEX *lex)
     Verify that the database name is allowed, optionally
     lowercase it.
   */
-  if (check_db_name((LEX_STRING*) &lex->sphead->m_db))
-  {
-    my_error(ER_WRONG_DB_NAME, MYF(0), lex->sphead->m_db.str);
+  if (thd->normalize_db_name_with_error(&lex->sphead->m_db))
     return true;
-  }
 
   if (check_access(thd, CREATE_PROC_ACL, lex->sphead->m_db.str,
                    NULL, NULL, 0, 0))
@@ -3181,11 +3167,8 @@ wsrep_error_label:
 static bool prepare_db_action(THD *thd, privilege_t want_access,
                               LEX_CSTRING *dbname)
 {
-  if (check_db_name((LEX_STRING*)dbname))
-  {
-    my_error(ER_WRONG_DB_NAME, MYF(0), dbname->str);
+  if (thd->normalize_db_name_with_error(dbname))
     return true;
-  }
   /*
     If in a slave thread :
     - CREATE DATABASE DB was certainly not preceded by USE DB.
@@ -5217,11 +5200,8 @@ mysql_execute_command(THD *thd, bool is_called_from_prepared_stmt)
       }
     }
 #endif
-    if (check_db_name((LEX_STRING*) db))
-    {
-      my_error(ER_WRONG_DB_NAME, MYF(0), db->str);
+    if (thd->normalize_db_name_with_error(db))
       break;
-    }
     if (check_access(thd, ALTER_ACL, db->str, NULL, NULL, 1, 0) ||
         check_access(thd, DROP_ACL, db->str, NULL, NULL, 1, 0) ||
         check_access(thd, CREATE_ACL, db->str, NULL, NULL, 1, 0))
@@ -6489,21 +6469,15 @@ static bool generate_incident_event(THD *thd)
 static int __attribute__ ((noinline))
 show_create_db(THD *thd, LEX *lex)
 {
-  char db_name_buff[NAME_LEN+1];
-  LEX_CSTRING db_name;
   DBUG_EXECUTE_IF("4x_server_emul",
                   my_error(ER_UNKNOWN_ERROR, MYF(0)); return 1;);
 
-  db_name.str= db_name_buff;
-  db_name.length= lex->name.length;
-  strmov(db_name_buff, lex->name.str);
-
-  if (check_db_name((LEX_STRING*) &db_name))
-  {
-    my_error(ER_WRONG_DB_NAME, MYF(0), db_name.str);
+  const Casedn_ident_buffer<SAFE_NAME_LEN> dbbuf(lex->name,
+                                                 lower_case_table_names);
+  if (dbbuf.check_db_name_with_error())
     return 1;
-  }
-  return mysqld_show_create_db(thd, &db_name, &lex->name, lex->create_info);
+  LEX_CSTRING db= dbbuf.to_lex_cstring();
+  return mysqld_show_create_db(thd, &db, &lex->name, lex->create_info);
 }
 
 
@@ -7345,33 +7319,19 @@ bool check_fk_parent_table_access(THD *thd,
 
       if (fk_key->ref_db.str)
       {
-        if (!(db_name.str= (char *) thd->memdup(fk_key->ref_db.str,
-                                                fk_key->ref_db.length+1)))
+        db_name= thd->make_normalized_db_name_with_error(fk_key->ref_db);
+        if (!db_name.str)
           return true;
-        db_name.length= fk_key->ref_db.length;
-
-        // Check if database name is valid or not.
-        if (check_db_name((LEX_STRING*) &db_name))
-        {
-          my_error(ER_WRONG_DB_NAME, MYF(0), db_name.str);
-          return true;
-        }
       }
       else
       {
         if (!thd->db.str)
         {
           DBUG_ASSERT(create_db);
-          db_name.length= strlen(create_db);
-          if (!(db_name.str= (char *) thd->memdup(create_db,
-                                                  db_name.length+1)))
+          db_name= thd->make_normalized_db_name_with_error(
+                                   Lex_cstring_strlen(create_db));
+          if (!db_name.str)
             return true;
-
-          if (check_db_name((LEX_STRING*) &db_name))
-          {
-            my_error(ER_WRONG_DB_NAME, MYF(0), db_name.str);
-            return true;
-          }
         }
         else
         {
@@ -7380,6 +7340,8 @@ bool check_fk_parent_table_access(THD *thd,
         }
       }
 
+      DBUG_ASSERT(ok_for_lower_case_names(db_name.str));
+
       // if lower_case_table_names is set then convert tablename to lower case.
       if (lower_case_table_names)
       {
@@ -7387,7 +7349,6 @@ bool check_fk_parent_table_access(THD *thd,
         table_name.str= name= (char *) thd->memdup(fk_key->ref_table.str,
                                                    fk_key->ref_table.length+1);
         table_name.length= my_casedn_str(files_charset_info, name);
-        db_name.length= my_casedn_str(files_charset_info, (char*) db_name.str);
       }
 
       parent_table.init_one_table(&db_name, &table_name, 0, TL_IGNORE);
@@ -8154,11 +8115,30 @@ bool add_to_list(THD *thd, SQL_I_List<ORDER> &list, Item *item,bool asc)
       0		Error
   @retval
     \#	Pointer to TABLE_LIST element added to the total table list
+
+
+  This method can be called in contexts when the "table" argument has a longer
+  life cycle than TABLE_LIST and belongs to a different MEM_ROOT than
+  the current THD::mem_root.
+
+  For example, it's called from Table_ident::resolve_table_rowtype_ref()
+  during sp_head::rcontext_create() during a CALL statement.
+  "table" in this case belongs to sp_pcontext, which must stay valid
+  (inside its SP cache sp_head entry) after the end of the current statement.
+
+  Let's allocate normalized copies of table.db and table.table on the current
+  THD::mem_root and store them in the TABLE_LIST.
+
+  We should not touch "table" and replace table.db and table.table to their
+  normalized copies allocated on the current THD::mem_root, because it'll be
+  freed at the end of the current statement, while table.db and table.table
+  should stay valid. Let's keep them in a non-normalized state.
+
 */
 
 TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
-					     Table_ident *table,
-					     LEX_CSTRING *alias,
+					     const Table_ident *table,
+					     const LEX_CSTRING *alias,
 					     ulong table_options,
 					     thr_lock_type lock_type,
 					     enum_mdl_type mdl_type,
@@ -8181,20 +8161,50 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
     DBUG_RETURN(0);				// End of memory
   alias_str= alias ? *alias : table->table;
   DBUG_ASSERT(alias_str.str);
+
+  if (unlikely(!(ptr= (TABLE_LIST *) thd->calloc(sizeof(TABLE_LIST)))))
+    DBUG_RETURN(0);				/* purecov: inspected */
+
+  // Make a mem_root copy of the table name (see function comments above)
   if (!MY_TEST(table_options & TL_OPTION_ALIAS) &&
       unlikely(check_table_name(table->table.str, table->table.length, FALSE)))
   {
     my_error(ER_WRONG_TABLE_NAME, MYF(0), table->table.str);
     DBUG_RETURN(0);
   }
+  if (!(ptr->table_name=
+        thd->lex_cstring_opt_casedn_ident(table->table,
+                                          lower_case_table_names)).str)
+    DBUG_RETURN(0); // EOM
 
-  if (unlikely(table->is_derived_table() == FALSE && table->db.str &&
-               !(table_options & TL_OPTION_TABLE_FUNCTION) &&
-               check_db_name((LEX_STRING*) &table->db)))
+  // Make a mem_root copy of the database name (see function comments above)
+  if (table->db.str)
   {
-    my_error(ER_WRONG_DB_NAME, MYF(0), table->db.str);
-    DBUG_RETURN(0);
+    ptr->is_fqtn= TRUE;
+    ptr->db= table->db.str == any_db.str ?
+             // any_db must be preserved as is, it has a special meaning.
+             any_db :
+             !table->is_derived_table() &&
+             !(table_options & TL_OPTION_TABLE_FUNCTION) ?
+             /*
+               Normal table:
+                 make an optionally lower-cased and a validated mem_root copy.
+             */
+             thd->make_normalized_db_name_with_error(table->db) :
+             /*
+               Derived or JSON table:
+                 make an optionally lower-cased mem_root copy,
+                 but do not perform validation.
+             */
+             thd->lex_cstring_opt_casedn_ident(table->db,
+                                               lower_case_table_names);
+    if (!ptr->db.str)
+      DBUG_RETURN(0); // EOM or an invalid database name
   }
+  else if (!lex->with_cte_resolution && lex->copy_db_to(&ptr->db))
+    DBUG_RETURN(0);
+  else
+    ptr->is_fqtn= FALSE;
 
   if (!alias)                            /* Alias is case sensitive */
   {
@@ -8208,30 +8218,10 @@ TABLE_LIST *st_select_lex::add_table_to_list(THD *thd,
     if (unlikely(!(alias_str.str= (char*) thd->memdup(alias_str.str, alias_str.length+1))))
       DBUG_RETURN(0);
   }
-  if (unlikely(!(ptr = (TABLE_LIST *) thd->calloc(sizeof(TABLE_LIST)))))
-    DBUG_RETURN(0);				/* purecov: inspected */
-  if (table->db.str)
-  {
-    ptr->is_fqtn= TRUE;
-    ptr->db= table->db;
-  }
-  else if (!lex->with_cte_resolution && lex->copy_db_to(&ptr->db))
-    DBUG_RETURN(0);
-  else
-    ptr->is_fqtn= FALSE;
 
   ptr->alias= alias_str;
   ptr->is_alias= alias ? TRUE : FALSE;
-  if (lower_case_table_names)
-  {
-    if (table->table.length)
-      table->table.length= my_casedn_str(files_charset_info,
-                                         (char*) table->table.str);
-    if (ptr->db.length && ptr->db.str != any_db.str)
-      ptr->db.length= my_casedn_str(files_charset_info, (char*) ptr->db.str);
-  }
 
-  ptr->table_name= table->table;
   ptr->lock_type= lock_type;
   ptr->mdl_type= mdl_type;
   ptr->table_options= table_options;

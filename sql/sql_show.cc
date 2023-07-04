@@ -4573,7 +4573,16 @@ make_table_name_list(THD *thd, Dynamic_array<LEX_CSTRING*> *table_names,
     return (schema_tables_add(thd, table_names,
                               lookup_field_vals->table_value.str));
 
-  if (check_db_name((LEX_STRING*)db_name))
+  DBUG_ASSERT(db_name->str);
+  if (lower_case_table_names)
+  {
+    const LEX_CSTRING tmp_db_name= thd->lex_cstring_casedn_ident(*db_name);
+    if (!tmp_db_name.str)
+      return 1; // EOM
+    *db_name= tmp_db_name;
+  }
+
+  if (Lex_ident_fs(*db_name).check_db_name())
     return 0; // Impossible TABLE_SCHEMA name
 
   find_files_result res= find_files(thd, table_names, db_name, path,

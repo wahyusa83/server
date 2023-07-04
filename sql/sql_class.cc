@@ -3974,6 +3974,58 @@ Query_arena::Type Statement::type() const
 }
 
 
+/*
+  Normalize a database name and check if it's valid.
+
+  If lower_case_table_names>0 then the names name is lower-cased.
+  Raise an error in case of EOM or a bad database name.
+
+  @param org_name Name of database
+
+  @returns non-NULL LEX_CSTRING  on ok
+  @returns NULL LEX_CSTRING      on error
+*/
+
+LEX_CSTRING
+Query_arena::normalized_db_name_with_error(const LEX_CSTRING &org_name)
+{
+  DBUG_ASSERT(org_name.str);
+  if (org_name.str == any_db.str)
+    return org_name;
+
+  const LEX_CSTRING tmp= lower_case_table_names ?
+                         lex_cstring_casedn_ident(org_name) :
+                         org_name;
+
+  if (!tmp.str /*EOM*/ ||
+      Lex_ident_fs(tmp).check_db_name_with_error())
+    return {0,0};
+
+  return tmp;
+}
+
+
+/*
+  Similar to normalized_db_name_with_error() but
+  allocates a new copy even if lower_case_table_names==0.
+*/
+LEX_CSTRING
+Query_arena::make_normalized_db_name_with_error(const LEX_CSTRING &org_name)
+{
+  DBUG_ASSERT(org_name.str);
+  if (org_name.str == any_db.str)
+    return org_name;
+
+  const LEX_CSTRING tmp= lex_cstring_opt_casedn_ident(org_name,
+                                                      lower_case_table_names);
+  if (!tmp.str /*EOM*/ ||
+      Lex_ident_fs(tmp).check_db_name_with_error())
+    return {0,0};
+
+  return tmp;
+}
+
+
 void Statement::set_statement(Statement *stmt)
 {
   id=             stmt->id;

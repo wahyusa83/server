@@ -5072,47 +5072,27 @@ bool ok_for_lower_case_names(const char *name)
 }
 #endif
 
-/*
-  Check if database name is valid
-
-  SYNPOSIS
-    check_db_name()
-    org_name		Name of database
-
-  NOTES
-    If lower_case_table_names is set to 1 then database name is converted
-    to lower case
-
-  RETURN
-    0	ok
-    1   error
-*/
-
-bool check_db_name(LEX_STRING *org_name)
+bool Lex_ident_fs::check_db_name() const
 {
-  char *name= org_name->str;
-  size_t name_length= org_name->length;
-  bool check_for_path_chars;
-
-  if ((check_for_path_chars= check_mysql50_prefix(name)))
+  DBUG_ASSERT(str);
+  if (check_mysql50_prefix(str))
   {
-    name+= MYSQL50_TABLE_NAME_PREFIX_LENGTH;
-    name_length-= MYSQL50_TABLE_NAME_PREFIX_LENGTH;
+    Lex_ident_fs name(Lex_cstring(str + MYSQL50_TABLE_NAME_PREFIX_LENGTH,
+                                  length - MYSQL50_TABLE_NAME_PREFIX_LENGTH));
+    return db_name_is_in_ignore_db_dirs_list(name.str) ||
+           check_body(name.str, name.length, true);
   }
+  return db_name_is_in_ignore_db_dirs_list(str) ||
+         check_body(str, length, false);
+}
 
-  if (!name_length || name_length > NAME_LEN)
-    return 1;
 
-  if (lower_case_table_names == 1 && name != any_db.str)
-  {
-    org_name->length= name_length= my_casedn_str(files_charset_info, name);
-    if (check_for_path_chars)
-      org_name->length+= MYSQL50_TABLE_NAME_PREFIX_LENGTH;
-  }
-  if (db_name_is_in_ignore_db_dirs_list(name))
-    return 1;
-
-  return check_table_name(name, name_length, check_for_path_chars);
+bool Lex_ident_fs::check_db_name_with_error() const
+{
+  if (!check_db_name())
+    return false;
+  my_error(ER_WRONG_DB_NAME ,MYF(0), safe_str(str));
+  return true;
 }
 
 
@@ -5124,9 +5104,6 @@ bool check_db_name(LEX_STRING *org_name)
 
 bool check_table_name(const char *name, size_t length, bool check_for_path_chars)
 {
-  // name length in symbols
-  size_t name_length= 0;
-  const char *end= name+length;
 
   if (!check_for_path_chars &&
       (check_for_path_chars= check_mysql50_prefix(name)))
@@ -5135,8 +5112,20 @@ bool check_table_name(const char *name, size_t length, bool check_for_path_chars
     length-= MYSQL50_TABLE_NAME_PREFIX_LENGTH;
   }
 
+  return Lex_ident_fs::check_body(name, length, check_for_path_chars);
+}
+
+
+bool Lex_ident_fs::check_body(const char *name, size_t length,
+                              bool disallow_path_chars)
+{
   if (!length || length > NAME_LEN)
     return 1;
+
+  // name length in symbols
+  size_t char_length= 0;
+  const char *end= name+length;
+
 #if defined(USE_MB) && defined(USE_MB_IDENT)
   bool last_char_is_space= FALSE;
 #else
@@ -5144,7 +5133,7 @@ bool check_table_name(const char *name, size_t length, bool check_for_path_chars
     return 1;
 #endif
 
-  while (name != end)
+  for ( ; name != end; char_length++)
   {
 #if defined(USE_MB) && defined(USE_MB_IDENT)
     last_char_is_space= my_isspace(system_charset_info, *name);
@@ -5154,12 +5143,11 @@ bool check_table_name(const char *name, size_t length, bool check_for_path_chars
       if (len)
       {
         name+= len;
-        name_length++;
         continue;
       }
     }
 #endif
-    if (check_for_path_chars &&
+    if (disallow_path_chars &&
         (*name == '/' || *name == '\\' || *name == '~' || *name == FN_EXTCHAR))
       return 1;
     /*
@@ -5178,10 +5166,9 @@ bool check_table_name(const char *name, size_t length, bool check_for_path_chars
     if (*name == 0x00)
       return 1;
     name++;
-    name_length++;
   }
 #if defined(USE_MB) && defined(USE_MB_IDENT)
-  return last_char_is_space || (name_length > NAME_CHAR_LEN);
+  return last_char_is_space || (char_length > NAME_CHAR_LEN);
 #else
   return FALSE;
 #endif

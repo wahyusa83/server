@@ -24,6 +24,7 @@
 #include "dur_prop.h"
 #include <waiting_threads.h>
 #include "sql_const.h"
+#include "lex_ident.h"
 #include <mysql/plugin_audit.h>
 #include "log.h"
 #include "rpl_tblmap.h"
@@ -1235,6 +1236,79 @@ public:
       memcpy(ptr,str,size);
     return ptr;
   }
+
+  // Make a lower-cased copy of an identifier on mem_root
+  LEX_STRING lex_string_casedn_ident(const LEX_CSTRING &src)
+  {
+    return lex_string_casedn_root(mem_root, &my_charset_utf8mb3_general_ci,
+                                  src.str, src.length);
+  }
+  LEX_CSTRING lex_cstring_casedn_ident(const LEX_CSTRING &src)
+  {
+    LEX_STRING res= lex_string_casedn_ident(src);
+    return {res.str, res.length};
+  }
+
+  // Make an optionally lower-cased copy of an identifier on mem_root
+  LEX_STRING lex_string_opt_casedn_ident(const LEX_CSTRING &src,
+                                         bool casedn)
+  {
+    return lex_string_opt_casedn_root(mem_root,
+                                      &my_charset_utf8mb3_general_ci,
+                                      src.str, src.length,
+                                      casedn);
+  }
+  LEX_CSTRING lex_cstring_opt_casedn_ident(const LEX_CSTRING &src,
+                                           bool casedn)
+  {
+    LEX_STRING res= lex_string_opt_casedn_ident(src, casedn);
+    return {res.str, res.length};
+  }
+
+  /*
+    Return a checked and normalized database name.
+    Copy on lower_case_table_name==0.
+
+    @param name         - The name to normalize. Must not be {NULL,0}.
+    @return             - {NULL,0} if the name is not a good database name
+                          or EOM. An errror is raised in both cases.
+    @return             - A non-NULL LEX_CSTRING otherwise.
+                          A new memory is allocated for all
+                          lower_case_table_names values (including 0).
+  */
+  LEX_CSTRING make_normalized_db_name_with_error(const LEX_CSTRING &name);
+
+  /*
+    Return a checked and normalized database name.
+    Pass through on lower_case_table_name==0.
+
+    @param name         - The name to normalize. Must not be {NULL,0}.
+    @return             - {NULL,0} if the name is not a good database name
+                          or EOM. An errror is raised in both cases.
+    @return             - A non-NULL LEX_CSTRING otherwise.
+                          If lower_case_table_names==0, then "name" is returned,
+                          without making a copy on THD::mem_root.
+                          If lower_case_table_names>0, then a new lower-cased
+                          copy is created on THD::mem_root.
+  */
+  LEX_CSTRING normalized_db_name_with_error(const LEX_CSTRING &name);
+
+  /*
+    - On lower_case_table_names==0 the name pointed by "db"
+      is only validated to be a good database name, without making a copy.
+    - On lower_case_table_names>0, the database name pointed by "db"
+      is copied to THD::mem_root with lower-case conversion.
+      The result of conversion is validated to be a good database name.
+  */
+  bool normalize_db_name_with_error(LEX_CSTRING *db)
+  {
+    LEX_CSTRING tmp= normalized_db_name_with_error(*db);
+    if (!tmp.str)
+      return true;
+    *db= tmp;
+    return false;
+  }
+
 
   void set_query_arena(Query_arena *set);
 
