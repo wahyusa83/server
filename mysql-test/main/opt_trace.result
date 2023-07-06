@@ -9160,5 +9160,134 @@ json_detailed(json_extract(trace, '$**.in_to_subquery_conversion'))
 ]
 set in_predicate_conversion_threshold=@tmp;
 drop table t0;
+#
+# MDEV-29298: INSERT ... SELECT Does not produce an optimizer trace
+#
+create table t1 (a int, b int);
+create table t2 (a int, b int);
+insert into t1 values (1,1), (2,2), (3,3), (4,4), (5,5);
+set optimizer_trace=1;
+insert into t2 select * from t1 where a<= b and a>4;
+select * from information_schema.optimizer_trace;
+QUERY	TRACE	MISSING_BYTES_BEYOND_MAX_MEM_SIZE	INSUFFICIENT_PRIVILEGES
+insert into t2 select * from t1 where a<= b and a>4	{
+  "steps": [
+    {
+      "join_preparation": {
+        "select_id": 1,
+        "steps": [
+          {
+            "expanded_query": "insert into t2 select t1.a AS a,t1.b AS b from t1 where t1.a <= t1.b and t1.a > 4"
+          }
+        ]
+      }
+    },
+    {
+      "join_optimization": {
+        "select_id": 1,
+        "steps": [
+          {
+            "condition_processing": {
+              "condition": "WHERE",
+              "original_condition": "t1.a <= t1.b and t1.a > 4",
+              "steps": [
+                {
+                  "transformation": "equality_propagation",
+                  "resulting_condition": "t1.a <= t1.b and t1.a > 4"
+                },
+                {
+                  "transformation": "constant_propagation",
+                  "resulting_condition": "t1.a <= t1.b and t1.a > 4"
+                },
+                {
+                  "transformation": "trivial_condition_removal",
+                  "resulting_condition": "t1.a <= t1.b and t1.a > 4"
+                }
+              ]
+            }
+          },
+          {
+            "table_dependencies": [
+              {
+                "table": "t1",
+                "row_may_be_null": false,
+                "map_bit": 0,
+                "depends_on_map_bits": []
+              }
+            ]
+          },
+          {
+            "ref_optimizer_key_uses": []
+          },
+          {
+            "rows_estimation": [
+              {
+                "selectivity_for_indexes": [],
+                "selectivity_for_columns": [],
+                "cond_selectivity": 1
+              },
+              {
+                "table": "t1",
+                "table_scan": {
+                  "rows": 5,
+                  "cost": 2.010986328
+                }
+              }
+            ]
+          },
+          {
+            "considered_execution_plans": [
+              {
+                "plan_prefix": [],
+                "table": "t1",
+                "best_access_path": {
+                  "considered_access_paths": [
+                    {
+                      "access_type": "scan",
+                      "resulting_rows": 5,
+                      "cost": 2.010986328,
+                      "chosen": true
+                    }
+                  ],
+                  "chosen_access_method": {
+                    "type": "scan",
+                    "records": 5,
+                    "cost": 2.010986328,
+                    "uses_join_buffering": false
+                  }
+                },
+                "rows_for_plan": 5,
+                "cost_for_plan": 3.010986328,
+                "estimated_join_cardinality": 5
+              }
+            ]
+          },
+          {
+            "best_join_order": ["t1"]
+          },
+          {
+            "attaching_conditions_to_tables": {
+              "original_condition": "t1.a <= t1.b and t1.a > 4",
+              "attached_conditions_computation": [],
+              "attached_conditions_summary": [
+                {
+                  "table": "t1",
+                  "attached": "t1.a <= t1.b and t1.a > 4"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "join_execution": {
+        "select_id": 1,
+        "steps": []
+      }
+    }
+  ]
+}	0	0
+drop table t1, t2;
 # End of 10.5 tests
 set optimizer_trace='enabled=off';
