@@ -770,16 +770,7 @@ int Log_event::read_log_event(IO_CACHE* file, String* packet,
   ulong data_len;
   char buf[LOG_EVENT_MINIMAL_HEADER_LEN];
   uchar ev_offset= packet->length();
-#if !defined(MYSQL_CLIENT)
-  if (max_allowed_packet == 0)
-  {
-    THD *thd=current_thd;
-    max_allowed_packet= thd ? thd->slave_thread
-                              ? slave_max_allowed_packet
-                              : thd->variables.max_allowed_packet
-                            : ~(uint)0;
-  }
-#endif
+
   DBUG_ENTER("Log_event::read_log_event(IO_CACHE*,String*...)");
 
   if (my_b_read(file, (uchar*) buf, sizeof(buf)))
