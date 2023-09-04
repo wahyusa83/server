@@ -346,7 +346,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 */
 
 %ifdef MARIADB
-%expect 64
+%expect 69
 %else
 %expect 65
 %endif
@@ -1387,6 +1387,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
         remember_cpp_ptr
         wild_and_where
         remember_start_opt
+        remember_end_opt
 
 %type <const_simple_string>
         field_length_str
@@ -1864,6 +1865,10 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %type <vers_column_versioning> with_or_without_system
 %type <engine_option_value_ptr> engine_defined_option;
 
+%type <lex> remember_lex
+%type <lex> package_routine_lex
+%type <sp_instr_addr> sp_instr_addr
+
 %ifdef MARIADB
 %type <NONE> sp_tail_standalone
 %type <NONE> sp_unlabeled_block_not_atomic
@@ -1876,12 +1881,23 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %type <spblock> sp_decl_variable_list
 %type <spblock> sp_decl_variable_list_anchored
 %type <kwd> reserved_keyword_udt_param_type
+
+%type <lex> sqlpsm_package_specification_function
+%type <lex> sqlpsm_package_specification_procedure
+
+%type <spblock> sqlpsm_package_implementation_routine_definition
+%type <spblock> sqlpsm_package_implementation_item_declaration
+%type <spblock> sqlpsm_package_implementation_declare_section
+%type <spblock> sqlpsm_package_implementation_declare_section_list1
+%type <spblock> sqlpsm_package_implementation_declare_section_list2
+%type <spblock_handlers> sqlpsm_package_implementation_executable_section
+
+
 %else
 %type <NONE> set_assign
 %type <spvar_mode> sp_opt_inout
 %type <NONE> sp_tail_standalone
 %type <NONE> sp_labelable_stmt
-%type <simple_string> remember_end_opt
 %type <lex_str> opt_package_routine_end_name
 %type <lex_str> label_declaration_oracle
 %type <lex_str> labels_declaration_oracle
@@ -1905,10 +1921,7 @@ bool my_yyoverflow(short **a, YYSTYPE **b, size_t *yystacksize);
 %type <spblock> package_implementation_declare_section_list2
 %type <spblock_handlers> sp_block_statements_and_exceptions
 %type <spblock_handlers> package_implementation_executable_section
-%type <sp_instr_addr> sp_instr_addr
 %type <num> opt_exception_clause exception_handlers
-%type <lex> remember_lex
-%type <lex> package_routine_lex
 %type <lex> package_specification_function
 %type <lex> package_specification_procedure
 %endif ORACLE
@@ -9137,6 +9150,15 @@ remember_start_opt:
               $$= (char*) YYLIP->get_cpp_ptr();
             else
               $$= (char*) YYLIP->get_cpp_tok_start();
+          }
+        ;
+
+remember_end_opt:
+          {
+            if (yychar == YYEMPTY)
+              $$= (char*) YYLIP->get_cpp_ptr_rtrim();
+            else
+              $$= (char*) YYLIP->get_cpp_tok_end_rtrim();
           }
         ;
 
@@ -18059,6 +18081,48 @@ sf_return_type:
           }
         ;
 
+package_routine_lex:
+          {
+            if (unlikely(!($$= new (thd->mem_root)
+                           sp_lex_local(thd, thd->lex))))
+              MYSQL_YYABORT;
+            thd->m_parser_state->m_yacc.reset_before_substatement();
+          }
+        ;
+
+remember_lex:
+          {
+            $$= thd->lex;
+          }
+        ;
+
+create_package_chistic:
+          COMMENT_SYM TEXT_STRING_sys
+          { Lex->sp_chistics.comment= $2; }
+        | sp_suid
+          { Lex->sp_chistics.suid= $1; }
+        ;
+
+create_package_chistics:
+          create_package_chistic {}
+        | create_package_chistics create_package_chistic { }
+        ;
+
+opt_create_package_chistics:
+          _empty
+        | create_package_chistics { }
+        ;
+
+opt_create_package_chistics_init:
+          { Lex->sp_chistics.init(); }
+          opt_create_package_chistics
+        ;
+
+sp_instr_addr:
+          { $$= Lex->sphead->instructions(); }
+        ;
+
+
 /*************************************************************************/
 
 xa:
@@ -18454,6 +18518,22 @@ drop_routine:
             if (Lex->stmt_drop_procedure($3, $4))
               MYSQL_YYABORT;
           }
+        | DROP PACKAGE_MARIADB_SYM opt_if_exists sp_name
+          {
+            LEX *lex= Lex;
+            lex->set_command(SQLCOM_DROP_PACKAGE, $3);
+            if (unlikely(lex->sphead))
+              my_yyabort_error((ER_SP_NO_DROP_SP, MYF(0), "PACKAGE"));
+            lex->spname= $4;
+          }
+        | DROP PACKAGE_MARIADB_SYM BODY_MARIADB_SYM opt_if_exists sp_name
+          {
+            LEX *lex= Lex;
+            lex->set_command(SQLCOM_DROP_PACKAGE_BODY, $4);
+            if (unlikely(lex->sphead))
+              my_yyabort_error((ER_SP_NO_DROP_SP, MYF(0), "PACKAGE BODY"));
+            lex->spname= $5;
+          }
         ;
 
 
@@ -18497,6 +18577,248 @@ create_routine:
             if (Lex->stmt_create_udf_function($1 | $5, $3, $6,
                                               (Item_result) $8, $10))
               MYSQL_YYABORT;
+          }
+
+        | create_or_replace definer_opt PACKAGE_MARIADB_SYM
+          opt_if_not_exists sp_name opt_create_package_chistics_init
+          remember_name
+          {
+            sp_package *pkg;
+            if (unlikely(!(pkg= Lex->
+                           create_package_start(thd,
+                                                SQLCOM_CREATE_PACKAGE,
+                                                &sp_handler_package_spec,
+                                                $5, $1 | $4))))
+              MYSQL_YYABORT;
+            pkg->set_c_chistics(Lex->sp_chistics);
+          }
+          opt_sqlpsm_package_specification_element_list END
+          remember_end_opt
+          {
+            if (unlikely(Lex->create_package_finalize(thd, $5, NULL, $7, $11)))
+              MYSQL_YYABORT;
+          }
+        | create_or_replace definer_opt PACKAGE_MARIADB_SYM BODY_MARIADB_SYM
+          opt_if_not_exists sp_name opt_create_package_chistics_init
+          remember_name
+          {
+            sp_package *pkg;
+            if (unlikely(!(pkg= Lex->
+                           create_package_start(thd,
+                                                SQLCOM_CREATE_PACKAGE_BODY,
+                                                &sp_handler_package_body,
+                                                $6, $1 | $5))))
+              MYSQL_YYABORT;
+            pkg->set_c_chistics(Lex->sp_chistics);
+            Lex->sp_block_init(thd);
+          }
+          sqlpsm_package_implementation_declare_section
+          {
+            if (unlikely(Lex->sp_block_with_exceptions_finalize_declarations(thd)))
+              MYSQL_YYABORT;
+          }
+          sqlpsm_package_implementation_executable_section
+          {
+            $10.hndlrs+= $12.hndlrs;
+            if (unlikely(Lex->sp_block_finalize(thd, $10)))
+              MYSQL_YYABORT;
+          }
+          remember_end_opt
+          {
+            if (unlikely(Lex->create_package_finalize(thd, $6, NULL, $8, $14)))
+              MYSQL_YYABORT;
+          }
+        ;
+
+
+opt_sqlpsm_package_specification_element_list:
+          _empty
+        | sqlpsm_package_specification_element_list
+        ;
+
+sqlpsm_package_specification_element_list:
+          sqlpsm_package_specification_element
+        | sqlpsm_package_specification_element_list
+          sqlpsm_package_specification_element
+        ;
+
+sqlpsm_package_specification_element:
+          FUNCTION_SYM sqlpsm_package_specification_function ';'
+          {
+            sp_package *pkg= Lex->get_sp_package();
+            if (unlikely(pkg->add_routine_declaration($2)))
+              MYSQL_YYABORT;
+            pkg->m_current_routine= NULL;
+          }
+        | PROCEDURE_SYM sqlpsm_package_specification_procedure ';'
+          {
+            sp_package *pkg= Lex->get_sp_package();
+            if (unlikely(pkg->add_routine_declaration($2)))
+              MYSQL_YYABORT;
+            pkg->m_current_routine= NULL;
+          }
+        ;
+
+sqlpsm_package_specification_function:
+          remember_lex package_routine_lex ident
+          {
+            DBUG_ASSERT($1->sphead->get_package());
+            $2->sql_command= SQLCOM_CREATE_FUNCTION;
+            sp_name *spname= $1->make_sp_name_package_routine(thd, $3);
+            if (unlikely(!spname))
+              MYSQL_YYABORT;
+            thd->lex= $2;
+            if (unlikely(!$2->make_sp_head_no_recursive(thd, spname,
+                                                        &sp_handler_package_function,
+                                                        NOT_AGGREGATE)))
+              MYSQL_YYABORT;
+            $1->sphead->get_package()->m_current_routine= $2;
+            (void) is_native_function_with_warn(thd, &$3);
+          }
+          sp_parenthesized_fdparam_list
+          RETURNS_SYM sf_return_type
+          sp_c_chistics
+          {
+            sp_head *sp= thd->lex->sphead;
+            sp->restore_thd_mem_root(thd);
+            thd->lex= $1;
+            $$= $2;
+          }
+        ;
+
+sqlpsm_package_specification_procedure:
+          remember_lex package_routine_lex ident
+          {
+            DBUG_ASSERT($1->sphead->get_package());
+            $2->sql_command= SQLCOM_CREATE_PROCEDURE;
+            sp_name *spname= $1->make_sp_name_package_routine(thd, $3);
+            if (unlikely(!spname))
+              MYSQL_YYABORT;
+            thd->lex= $2;
+            if (unlikely(!$2->make_sp_head_no_recursive(thd, spname,
+                                                        &sp_handler_package_procedure,
+                                                        DEFAULT_AGGREGATE)))
+              MYSQL_YYABORT;
+            $1->sphead->get_package()->m_current_routine= $2;
+          }
+          sp_parenthesized_pdparam_list
+          sp_c_chistics
+          {
+            sp_head *sp= thd->lex->sphead;
+            sp->restore_thd_mem_root(thd);
+            thd->lex= $1;
+            $$= $2;
+          }
+        ;
+
+
+//  Inside CREATE PACKAGE BODY, package-wide items (e.g. variables)
+//  must be declared before routine definitions.
+
+sqlpsm_package_implementation_declare_section:
+          sqlpsm_package_implementation_declare_section_list1
+        | sqlpsm_package_implementation_declare_section_list2
+        | sqlpsm_package_implementation_declare_section_list1
+          sqlpsm_package_implementation_declare_section_list2
+          { $$.join($1, $2); }
+        ;
+
+sqlpsm_package_implementation_declare_section_list1:
+          sqlpsm_package_implementation_item_declaration
+        | sqlpsm_package_implementation_declare_section_list1
+          sqlpsm_package_implementation_item_declaration
+          { $$.join($1, $2); }
+        ;
+
+sqlpsm_package_implementation_declare_section_list2:
+          sqlpsm_package_implementation_routine_definition
+        | sqlpsm_package_implementation_declare_section_list2
+          sqlpsm_package_implementation_routine_definition
+          { $$.join($1, $2); }
+        ;
+
+sqlpsm_package_implementation_item_declaration:
+          DECLARE_MARIADB_SYM sp_decl_variable_list ';' { $$= $2; }
+        ;
+
+
+sqlpsm_package_implementation_executable_section:
+          END
+          {
+            if (unlikely(Lex->sp_block_with_exceptions_add_empty(thd)))
+              MYSQL_YYABORT;
+            $$.init(0);
+          }
+        | sp_instr_addr
+          sp_proc_stmt
+          {
+            if (unlikely(Lex->sp_block_with_exceptions_finalize_executable_section(thd, $1)) ||
+                (unlikely(Lex->sp_block_with_exceptions_finalize_exceptions(thd, $1, 0))))
+              MYSQL_YYABORT;
+          }
+          ';' END
+          {
+            $$.init(0);
+          }
+        ;
+
+
+sqlpsm_package_implementation_routine_definition:
+          FUNCTION_SYM sqlpsm_package_specification_function
+                       sqlpsm_package_implementation_function_body   ';'
+          {
+            sp_package *pkg= Lex->get_sp_package();
+            if (unlikely(pkg->add_routine_implementation($2)))
+              MYSQL_YYABORT;
+            pkg->m_current_routine= NULL;
+            $$.init();
+          }
+        | PROCEDURE_SYM sqlpsm_package_specification_procedure
+                        sqlpsm_package_implementation_procedure_body ';'
+          {
+            sp_package *pkg= Lex->get_sp_package();
+            if (unlikely(pkg->add_routine_implementation($2)))
+              MYSQL_YYABORT;
+            pkg->m_current_routine= NULL;
+            $$.init();
+          }
+        | sqlpsm_package_specification_element { $$.init(); }
+        ;
+
+
+sqlpsm_package_implementation_function_body:
+          remember_lex
+          {
+            sp_package *pkg= Lex->get_sp_package();
+            sp_head *sp= pkg->m_current_routine->sphead;
+            thd->lex= pkg->m_current_routine;
+            sp->reset_thd_mem_root(thd);
+            sp->set_c_chistics(thd->lex->sp_chistics);
+            sp->set_body_start(thd, YYLIP->get_cpp_tok_start());
+          }
+          sp_proc_stmt_in_returns_clause force_lookahead
+          {
+            if (unlikely(thd->lex->sp_body_finalize_function(thd)))
+              MYSQL_YYABORT;
+            thd->lex= $1;
+          }
+        ;
+
+sqlpsm_package_implementation_procedure_body:
+          remember_lex
+          {
+            sp_package *pkg= Lex->get_sp_package();
+            sp_head *sp= pkg->m_current_routine->sphead;
+            thd->lex= pkg->m_current_routine;
+            sp->reset_thd_mem_root(thd);
+            sp->set_c_chistics(thd->lex->sp_chistics);
+            sp->set_body_start(thd, YYLIP->get_cpp_tok_start());
+          }
+          sp_proc_stmt force_lookahead
+          {
+            if (unlikely(thd->lex->sp_body_finalize_procedure(thd)))
+              MYSQL_YYABORT;
+            thd->lex= $1;
           }
         ;
 
@@ -18777,15 +19099,6 @@ sp_block_label:
         ;
 
 
-remember_end_opt:
-          {
-            if (yychar == YYEMPTY)
-              $$= (char*) YYLIP->get_cpp_ptr_rtrim();
-            else
-              $$= (char*) YYLIP->get_cpp_tok_end_rtrim();
-          }
-        ;
-
 sp_opt_default:
           _empty       { $$= { nullptr, empty_clex_str}; }
         | DEFAULT remember_cpp_ptr expr remember_end
@@ -18833,12 +19146,6 @@ sp_proc_stmts1_implicit_block:
           }
         ;
 
-
-remember_lex:
-          {
-            $$= thd->lex;
-          }
-        ;
 
 keyword_directly_assignable:
           keyword_data_type
@@ -19001,10 +19308,6 @@ sp_tail_is:
         | AS
         ;
 
-sp_instr_addr:
-          { $$= Lex->sphead->instructions(); }
-        ;
-
 sp_body:
           {
             Lex->sp_block_init(thd);
@@ -19023,29 +19326,6 @@ sp_body:
           }
           END
         ;
-
-create_package_chistic:
-          COMMENT_SYM TEXT_STRING_sys
-          { Lex->sp_chistics.comment= $2; }
-        | sp_suid
-          { Lex->sp_chistics.suid= $1; }
-        ;
-
-create_package_chistics:
-          create_package_chistic {}
-        | create_package_chistics create_package_chistic { }
-        ;
-
-opt_create_package_chistics:
-          _empty
-        | create_package_chistics { }
-        ;
-
-opt_create_package_chistics_init:
-          { Lex->sp_chistics.init(); }
-          opt_create_package_chistics
-        ;
-
 
 package_implementation_executable_section:
           END
@@ -19081,15 +19361,6 @@ package_implementation_declare_section_list2:
         | package_implementation_declare_section_list2
           package_implementation_routine_definition
           { $$.join($1, $2); }
-        ;
-
-package_routine_lex:
-          {
-            if (unlikely(!($$= new (thd->mem_root)
-                           sp_lex_local(thd, thd->lex))))
-              MYSQL_YYABORT;
-            thd->m_parser_state->m_yacc.reset_before_substatement();
-          }
         ;
 
 
