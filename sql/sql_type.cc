@@ -8671,6 +8671,36 @@ Type_handler_temporal_result::Item_const_eq(const Item_const *a,
           b->get_type_all_attributes_from_const()->decimals);
 }
 
+
+bool
+Type_handler_timestamp_common::Item_const_eq(const Item_const *a,
+                                             const Item_const *b,
+                                             bool binary_cmp) const
+{
+  /*
+    In a condition like:
+      WHERE IF(a='2001-01-01 00:00:00',1,0)=IF(a='2001-01-01 00:00:00',1,0);
+    Item_func_eq::fix_length_and_dec() calls get_timestamp_item_for_comparison()
+    which replaces string literals '2001-01-01 00:00:00' to
+    Item_timestamp_literal instances, which later during remove_eq_conds()
+    come to here.
+
+    Note, Item_param bound to TIMESTAMP is not detected here,
+    so trivial conditions of this kind do not get eliminated:
+      DECLARE ts TIMESTAMP DEFAULT (SELECT MAX(ts_col) FROM t1);
+      EXECUTE IMMEDIATE
+        'SELECT * FROM t1 WHERE COALESCE(ts_col,?)<=>COALESCE(ts_col,?)'
+         USING ts, ts;
+    It should be fixed by MDEV-14271.
+  */
+  const Item_timestamp_literal *ta, *tb;
+  if (!(ta= dynamic_cast<const Item_timestamp_literal*>(a)) ||
+      !(tb= dynamic_cast<const Item_timestamp_literal*>(b)))
+    return false;
+  return !ta->value().cmp(tb->value());
+}
+
+
 /***************************************************************************/
 
 const Type_handler *
