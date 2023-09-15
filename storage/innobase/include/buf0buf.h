@@ -1414,11 +1414,19 @@ public:
   }
 
   /** Determine if a buffer block was created by chunk_t::create().
+  @param bpage  block descriptor (not dereferenced)
+  @return whether block has been created by chunk_t::create() */
+  bool is_uncompressed(const buf_page_t *bpage) const
+  {
+    return is_block_field(reinterpret_cast<const void*>(bpage));
+  }
+
+  /** Determine if a buffer block was created by chunk_t::create().
   @param block  block descriptor (not dereferenced)
   @return whether block has been created by chunk_t::create() */
   bool is_uncompressed(const buf_block_t *block) const
   {
-    return is_block_field(reinterpret_cast<const void*>(block));
+    return is_uncompressed(&block->page);
   }
 
 public:

@@ -842,7 +842,8 @@ bool buf_LRU_free_page(buf_page_t *bpage, bool zip)
 		ut_ad(!bpage->oldest_modification());
 		/* fall through */
 	case 0:
-		if (zip || !bpage->zip.data || !bpage->frame()) {
+		if (zip || !bpage->zip.data
+		    || !buf_pool.is_uncompressed(bpage)) {
 			break;
 		}
 relocate_compressed:
@@ -860,7 +861,8 @@ relocate_compressed:
 		}
 		break;
 	default:
-		if (zip || !bpage->zip.data || !bpage->frame()) {
+		if (zip || !bpage->zip.data
+		    || !buf_pool.is_uncompressed(bpage)) {
 			/* This would completely free the block. */
 			/* Do not completely free dirty blocks. */
 func_exit:
@@ -901,7 +903,7 @@ func_exit:
 		buf_LRU_block_remove_hashed(), which
 		invokes buf_LRU_remove_block(). */
 		ut_ad(!bpage->in_LRU_list);
-		ut_ad(bpage->frame());
+		ut_ad(buf_pool.is_uncompressed(bpage));
 		ut_ad(!((buf_block_t*) bpage)->in_unzip_LRU_list);
 
 		/* The fields of bpage were copied to b before
