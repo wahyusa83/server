@@ -62,7 +62,7 @@ dict_hdr_get_new_id(
 
 	mtr.start();
 	buf_block_t* dict_hdr = dict_hdr_get(&mtr);
-	page_t* dict = dict_hdr->page.frame;
+	page_t* dict = dict_hdr->page.frame();
 
 	if (table_id) {
 		id = mach_read_from_8(DICT_HDR + DICT_HDR_TABLE_ID + dict);
@@ -99,7 +99,7 @@ void dict_hdr_flush_row_id(row_id_t id)
   mtr_t mtr;
   mtr.start();
   buf_block_t* d= dict_hdr_get(&mtr);
-  byte *row_id= DICT_HDR + DICT_HDR_ROW_ID + d->page.frame;
+  byte *row_id= DICT_HDR + DICT_HDR_ROW_ID + d->page.frame();
   if (mach_read_from_8(row_id) < id)
     mtr.write<8>(*d, row_id, id);
   mtr.commit();
@@ -126,7 +126,7 @@ dberr_t dict_create()
 		goto func_exit;
 	}
 	ut_a(d->page.id() == hdr_page_id);
-	dict = d->page.frame;
+	dict = d->page.frame();
 
 	/* Start counting row, table, index, and tree ids from
 	DICT_HDR_FIRST_ID */
@@ -239,7 +239,7 @@ dberr_t dict_boot()
 
 	dict_sys.lock(SRW_LOCK_CALL);
 
-	const byte* dict_hdr = &d->page.frame[DICT_HDR];
+	const byte* dict_hdr = &d->page.frame()[DICT_HDR];
 
 	/* Because we only write new row ids to disk-based data structure
 	(dictionary header) when it is divisible by

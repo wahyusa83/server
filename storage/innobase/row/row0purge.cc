@@ -863,7 +863,7 @@ skip_secondaries:
 				block->page.set_accessed();
 				buf_page_make_young_if_needed(&block->page);
 
-				byte* data_field = block->page.frame
+				byte* data_field = block->page.frame()
 					+ offset + internal_offset;
 
 				ut_a(dfield_get_len(&ufield->new_val)

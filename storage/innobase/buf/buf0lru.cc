@@ -294,7 +294,7 @@ buf_block_t* buf_LRU_get_free_only()
 			assert_block_ahi_empty(block);
 
 			block->page.set_state(buf_page_t::MEMORY);
-			MEM_MAKE_ADDRESSABLE(block->page.frame, srv_page_size);
+			MEM_MAKE_ADDRESSABLE(block->page.frame(), srv_page_size);
 			break;
 		}
 
@@ -842,7 +842,7 @@ bool buf_LRU_free_page(buf_page_t *bpage, bool zip)
 		ut_ad(!bpage->oldest_modification());
 		/* fall through */
 	case 0:
-		if (zip || !bpage->zip.data || !bpage->frame) {
+		if (zip || !bpage->zip.data || !bpage->frame()) {
 			break;
 		}
 relocate_compressed:
@@ -850,7 +850,7 @@ relocate_compressed:
 		ut_a(b);
 		mysql_mutex_lock(&buf_pool.flush_list_mutex);
 		new (b) buf_page_t(*bpage);
-		b->frame = nullptr;
+		b->frame_ = nullptr;
 		{
 			ut_d(uint32_t s=) b->fix();
 			ut_ad(s == buf_page_t::FREED
@@ -860,7 +860,7 @@ relocate_compressed:
 		}
 		break;
 	default:
-		if (zip || !bpage->zip.data || !bpage->frame) {
+		if (zip || !bpage->zip.data || !bpage->frame()) {
 			/* This would completely free the block. */
 			/* Do not completely free dirty blocks. */
 func_exit:
@@ -901,7 +901,7 @@ func_exit:
 		buf_LRU_block_remove_hashed(), which
 		invokes buf_LRU_remove_block(). */
 		ut_ad(!bpage->in_LRU_list);
-		ut_ad(bpage->frame);
+		ut_ad(bpage->frame());
 		ut_ad(!((buf_block_t*) bpage)->in_unzip_LRU_list);
 
 		/* The fields of bpage were copied to b before
@@ -982,9 +982,9 @@ func_exit:
 		the contents of the page valid (which it still is) in
 		order to avoid bogus Valgrind or MSAN warnings.*/
 
-		MEM_MAKE_DEFINED(block->page.frame, srv_page_size);
+		MEM_MAKE_DEFINED(block->page.frame(), srv_page_size);
 		btr_search_drop_page_hash_index(block, false);
-		MEM_UNDEFINED(block->page.frame, srv_page_size);
+		MEM_UNDEFINED(block->page.frame(), srv_page_size);
 		mysql_mutex_lock(&buf_pool.mutex);
 	}
 #endif
@@ -1016,7 +1016,7 @@ buf_LRU_block_free_non_file_page(
 	ut_ad(!block->page.hash);
 
 	block->page.set_state(buf_page_t::NOT_USED);
-	page_t* page = block->page.frame;
+	page_t* page = block->page.frame();
 
 	MEM_UNDEFINED(page, srv_page_size);
 	/* Wipe page_no and space_id */
@@ -1092,7 +1092,7 @@ static bool buf_LRU_block_remove_hashed(buf_page_t *bpage, const page_id_t id,
 
 	buf_pool.freed_page_clock += 1;
 
-	page_t *page = bpage->frame;
+	page_t *page = bpage->frame();
 
 	if (UNIV_LIKELY(!bpage->zip.data)) {
 		MEM_CHECK_ADDRESSABLE(bpage, sizeof(buf_block_t));
@@ -1368,7 +1368,7 @@ void buf_LRU_validate()
 	     bpage != NULL;
              bpage = UT_LIST_GET_NEXT(LRU, bpage)) {
 		ut_ad(bpage->in_file());
-		ut_ad(!bpage->frame
+		ut_ad(!bpage->frame()
 		      || reinterpret_cast<buf_block_t*>(bpage)
 		      ->in_unzip_LRU_list
 		      == bpage->belongs_to_unzip_LRU());
@@ -1452,7 +1452,7 @@ void buf_LRU_print()
 				bpage->zip_size(),
 				btr_page_get_index_id(frame));
 		} else {
-			const page_t* page = bpage->frame;
+			const page_t* page = bpage->frame();
 			fprintf(stderr, "\ntype %u index id " IB_ID_FMT "\n",
 				fil_page_get_type(page),
 				btr_page_get_index_id(page));

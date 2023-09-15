@@ -464,7 +464,7 @@ static ulint trx_rseg_get_n_undo_tablespaces()
 
   if (const buf_block_t *sys_header= trx_sysf_get(&mtr, false))
   {
-    const page_t *sys_page= sys_header->page.frame;
+    const page_t *sys_page= sys_header->page.frame();
     for (ulint rseg_id= 0; rseg_id < TRX_SYS_N_RSEGS; rseg_id++)
       if (trx_sysf_rseg_get_page_no(sys_page, rseg_id) != FIL_NULL)
         if (uint32_t space= trx_sysf_rseg_get_space(sys_page, rseg_id))
@@ -1528,13 +1528,13 @@ file_checked:
 				ut_a(block);
 				ulint size = mach_read_from_4(
 					FSP_HEADER_OFFSET + FSP_SIZE
-					+ block->page.frame);
+					+ block->page.frame());
 				ut_ad(size == fil_system.sys_space
 				      ->size_in_header);
 				size += sum_of_new_sizes;
 				mtr.write<4>(*block,
 					     FSP_HEADER_OFFSET + FSP_SIZE
-					     + block->page.frame, size);
+					     + block->page.frame(), size);
 				fil_system.sys_space->size_in_header
 					= uint32_t(size);
 				mtr.commit();
@@ -1548,7 +1548,7 @@ file_checked:
 			buf_block_t* block = buf_page_get(page_id_t(0, 0), 0,
 							  RW_S_LATCH, &mtr);
 			ut_ad(mach_read_from_4(FSP_SIZE + FSP_HEADER_OFFSET
-					       + block->page.frame)
+					       + block->page.frame())
 			      == fil_system.sys_space->size_in_header);
 			mtr.commit();
 		}
@@ -1743,7 +1743,7 @@ file_checked:
 				mtr.commit();
 				return srv_init_abort(DB_CORRUPTION);
 			}
-			fil_block_check_type(*block, block->page.frame,
+			fil_block_check_type(*block, block->page.frame(),
 					     FIL_PAGE_TYPE_SYS, &mtr);
 			/* Already MySQL 3.23.53 initialized
 			FSP_IBUF_TREE_ROOT_PAGE_NO to
@@ -1754,7 +1754,7 @@ file_checked:
 			if (UNIV_UNLIKELY(!block)) {
 				goto corrupted_old_page;
 			}
-			fil_block_check_type(*block, block->page.frame,
+			fil_block_check_type(*block, block->page.frame(),
 					     FIL_PAGE_TYPE_TRX_SYS, &mtr);
 			block = buf_page_get(
 				page_id_t(TRX_SYS_SPACE,
@@ -1763,7 +1763,7 @@ file_checked:
 			if (UNIV_UNLIKELY(!block)) {
 				goto corrupted_old_page;
 			}
-			fil_block_check_type(*block, block->page.frame,
+			fil_block_check_type(*block, block->page.frame(),
 					     FIL_PAGE_TYPE_SYS, &mtr);
 			block = buf_page_get(
 				page_id_t(TRX_SYS_SPACE, FSP_DICT_HDR_PAGE_NO),
@@ -1771,7 +1771,7 @@ file_checked:
 			if (UNIV_UNLIKELY(!block)) {
 				goto corrupted_old_page;
 			}
-			fil_block_check_type(*block, block->page.frame,
+			fil_block_check_type(*block, block->page.frame(),
 					     FIL_PAGE_TYPE_SYS, &mtr);
 			mtr.commit();
 		}
