@@ -98,33 +98,33 @@ inline roll_ptr_t trx_read_roll_ptr(const byte* ptr)
 
 /** Get the next record in an undo log.
 @param[in]      undo_page       undo log page
-@param[in]      rec             undo record offset in the page
+@param[in]      rec             undo record in the page
 @param[in]      page_no         undo log header page number
 @param[in]      offset          undo log header offset on page
 @return undo log record, the page latched, NULL if none */
 inline trx_undo_rec_t*
-trx_undo_page_get_next_rec(const buf_block_t *undo_page, uint16_t rec,
+trx_undo_page_get_next_rec(const buf_block_t *undo_page, const byte *rec,
                            uint32_t page_no, uint16_t offset);
 /** Get the previous record in an undo log.
 @param[in,out]  block   undo log page
-@param[in]      rec     undo record offset in the page
+@param[in]      rec     undo record in the page
 @param[in]      page_no undo log header page number
 @param[in]      offset  undo log header offset on page
 @param[in]      shared  latching mode: true=RW_S_LATCH, false=RW_X_LATCH
 @param[in,out]  mtr     mini-transaction
 @return undo log record, the page latched, NULL if none */
 trx_undo_rec_t*
-trx_undo_get_prev_rec(buf_block_t *&block, uint16_t rec, uint32_t page_no,
+trx_undo_get_prev_rec(buf_block_t *&block, const byte *rec, uint32_t page_no,
                       uint16_t offset, bool shared, mtr_t *mtr);
 /** Get the next record in an undo log.
 @param[in,out]  block   undo log page
-@param[in]      rec     undo record offset in the page
+@param[in]      rec     undo record in the page
 @param[in]      page_no undo log header page number
 @param[in]      offset  undo log header offset on page
 @param[in,out]  mtr     mini-transaction
 @return undo log record, the page latched, NULL if none */
 trx_undo_rec_t*
-trx_undo_get_next_rec(const buf_block_t *&block, uint16_t rec,
+trx_undo_get_next_rec(const buf_block_t *&block, const byte *rec,
                       uint32_t page_no, uint16_t offset, mtr_t *mtr);
 
 /** Get the first record in an undo log.
@@ -145,8 +145,9 @@ trx_undo_get_first_rec(const fil_space_t &space, uint32_t page_no,
 /** Initialize an undo log page.
 NOTE: This corresponds to a redo log record and must not be changed!
 @see mtr_t::undo_create()
-@param[in,out]	block	undo log page */
-void trx_undo_page_init(const buf_block_t &block);
+@param block   undo log page
+@param page    undo log page frame */
+void trx_undo_page_init(const buf_block_t &block, page_t *page);
 
 /** Allocate an undo log page.
 @param[in,out]	undo	undo log
@@ -339,7 +340,7 @@ public:
   }
 
   /** Assign the undo log record and offset */
-  inline void assign_rec(const buf_block_t &block, uint16_t offset);
+  inline void assign_rec(const byte *offset);
 
   uint16_t get_offset() const { return offset; }
 

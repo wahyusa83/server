@@ -1105,11 +1105,12 @@ btr_cur_t::open_random_leaf(rec_offs *&offsets, mem_heap_t *&heap, mtr_t &mtr)
 
   mtr_s_lock_index(index(), &mtr);
 
-  if (index()->page == FIL_NULL)
+  auto offset= index()->page;
+
+  if (offset == FIL_NULL)
     return DB_CORRUPTION;
 
   dberr_t err;
-  auto offset= index()->page;
   bool merge= false;
   ulint height= ULINT_UNDEFINED;
 
@@ -1117,10 +1118,11 @@ btr_cur_t::open_random_leaf(rec_offs *&offsets, mem_heap_t *&heap, mtr_t &mtr)
          btr_block_get(*index(), offset, RW_S_LATCH, merge, &mtr, &err))
   {
     page_cur.block= block;
+    page_cur.rec= block->page.frame;
 
     if (height == ULINT_UNDEFINED)
     {
-      height= btr_page_get_level(block->page.frame);
+      height= btr_page_get_level(page_cur.rec);
       if (height > BTR_MAX_LEVELS)
         return DB_CORRUPTION;
 
@@ -1132,14 +1134,23 @@ btr_cur_t::open_random_leaf(rec_offs *&offsets, mem_heap_t *&heap, mtr_t &mtr)
     {
       mtr.rollback_to_savepoint(0, mtr.get_savepoint() - 1);
     got_leaf:
-      page_cur.rec= page_get_infimum_rec(block->page.frame);
+      page_cur.rec= page_get_infimum_rec(page_cur.rec);
       return DB_SUCCESS;
     }
 
     if (!--height)
       merge= !index()->is_clust();
 
-    page_cur_open_on_rnd_user_rec(&page_cur);
+    if (const ulint n_recs= page_get_n_recs(page_cur.rec))
+    {
+      page_cur.rec= page_rec_get_nth(page_cur.rec,
+                                     ut_rnd_interval(n_recs) + 1);
+      if (UNIV_UNLIKELY(!page_cur.rec))
+        goto goto_infimum;
+    }
+    else
+    goto_infimum:
+      page_cur.rec= page_get_infimum_rec(page_cur.rec);
 
     offsets= rec_get_offsets(page_cur.rec, page_cur.index, offsets, 0,
                              ULINT_UNDEFINED, &heap);
@@ -1506,17 +1517,18 @@ invalid:
 			goto invalid;
 		}
 
+		const page_t* page = root->page.frame;
 		mtr.x_lock_space(index->table->space);
 
 		ulint dummy, size;
 		index->stat_index_size
 			= fseg_n_reserved_pages(*root, PAGE_HEADER
 						+ PAGE_BTR_SEG_LEAF
-						+ root->page.frame, &size,
+						+ page, &size,
 						&mtr)
 			+ fseg_n_reserved_pages(*root, PAGE_HEADER
 						+ PAGE_BTR_SEG_TOP
-						+ root->page.frame, &dummy,
+						+ page, &dummy,
 						&mtr);
 
 		mtr.commit();
@@ -1652,15 +1664,16 @@ static dberr_t page_cur_open_level(page_cur_t *page_cur, ulint level,
 
   uint32_t page= index->page;
 
-  for (ulint height = ULINT_UNDEFINED;; height--)
+  for (ulint height= ULINT_UNDEFINED;; height--)
   {
-    buf_block_t* block=
+    buf_block_t *block=
       btr_block_get(*index, page, RW_S_LATCH,
                     !height && !index->is_clust(), mtr, &err);
     if (!block)
       break;
 
-    const uint32_t l= btr_page_get_level(block->page.frame);
+    const page_t *p= block->page.frame;
+    const uint32_t l= btr_page_get_level(p);
 
     if (height == ULINT_UNDEFINED)
     {
@@ -1670,7 +1683,7 @@ static dberr_t page_cur_open_level(page_cur_t *page_cur, ulint level,
       if (UNIV_UNLIKELY(height < level))
         return DB_CORRUPTION;
     }
-    else if (UNIV_UNLIKELY(height != l) || page_has_prev(block->page.frame))
+    else if (UNIV_UNLIKELY(height != l) || page_has_prev(p))
     {
       err= DB_CORRUPTION;
       break;
@@ -2712,14 +2725,16 @@ empty_index:
 		DBUG_RETURN(result);
 	}
 
-	uint16_t root_level = btr_page_get_level(root->page.frame);
+	const page_t *page = root->page.frame;
+
+	uint16_t root_level = btr_page_get_level(page);
 	mtr.x_lock_space(index->table->space);
 	ulint dummy, size;
 	result.index_size
 		= fseg_n_reserved_pages(*root, PAGE_HEADER + PAGE_BTR_SEG_LEAF
-					+ root->page.frame, &size, &mtr)
+					+ page, &size, &mtr)
 		+ fseg_n_reserved_pages(*root, PAGE_HEADER + PAGE_BTR_SEG_TOP
-					+ root->page.frame, &dummy, &mtr);
+					+ page, &dummy, &mtr);
 	result.n_leaf_pages = size ? size : 1;
 
 	const auto bulk_trx_id = index->table->bulk_trx_id;
@@ -2826,7 +2841,8 @@ empty_index:
 		ut_ad(mtr.get_savepoint() == 1);
 		buf_block_t *root = btr_root_block_get(index, RW_S_LATCH,
 						       &mtr, &err);
-		if (!root || root_level != btr_page_get_level(root->page.frame)
+		if (!root
+		    || root_level != btr_page_get_level(root->page.frame)
 		    || index->table->bulk_trx_id != bulk_trx_id) {
 			/* Just quit if the tree has changed beyond
 			recognition here. The old stats from previous

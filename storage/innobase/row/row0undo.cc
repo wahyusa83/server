@@ -319,11 +319,12 @@ static bool row_undo_rec_get(undo_node_t* node)
 		return false;
 	}
 
-	uint16_t offset = undo->top_offset;
+	const byte* offset = undo_page->page.frame + undo->top_offset;
 
 	buf_block_t* prev_page = undo_page;
 	if (trx_undo_rec_t* prev_rec = trx_undo_get_prev_rec(
-		    prev_page, offset, undo->hdr_page_no, undo->hdr_offset,
+		    prev_page, offset,
+		    undo->hdr_page_no, undo->hdr_offset,
 		    true, &mtr)) {
 		if (prev_page != undo_page) {
 			trx->pages_undone++;
@@ -338,8 +339,7 @@ static bool row_undo_rec_get(undo_node_t* node)
 		ut_ad(undo->empty());
 	}
 
-	node->undo_rec = trx_undo_rec_copy(undo_page->page.frame + offset,
-					   node->heap);
+	node->undo_rec = trx_undo_rec_copy(offset, node->heap);
 	mtr.commit();
 
 	if (UNIV_UNLIKELY(!node->undo_rec)) {
