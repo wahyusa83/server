@@ -6386,7 +6386,8 @@ int fill_schema_collation(THD *thd, TABLE_LIST *tables, COND *cond)
           character set prefix).
         */
         if (is_context &&
-            cmp(tmp_cl->cs_name, Lex_cstring(STRING_WITH_LEN("utf8mb4"))))
+            ((thd->variables.old_behavior & OLD_MODE_NO_NULL_COLLATION_IDS) ||
+            cmp(tmp_cl->cs_name, Lex_cstring(STRING_WITH_LEN("utf8mb4")))))
           continue;
 	restore_record(table, s->default_values);
         table->field[0]->store(context_collation_name, scs);
