@@ -11180,6 +11180,7 @@ int ha_spider::direct_delete_rows(
   if (
     (active_index != MAX_KEY && (error_num = index_handler_init())) ||
     (active_index == MAX_KEY && (error_num = rnd_handler_init())) ||
+    (error_num = spider_check_trx_and_get_conn(trx->thd, this, FALSE)) ||
     (error_num = spider_db_direct_delete(this, table, delete_rows))
   )
     DBUG_RETURN(check_error_mode(error_num));
