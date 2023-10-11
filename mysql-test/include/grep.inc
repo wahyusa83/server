@@ -3,6 +3,7 @@
 # Usage:
 # --let grep_file= /path/to/your/file
 # --let grep_regex= your_regex_string
+# --let grep_once= your_regex_string_to_match_once
 # --source include/grep.inc
 
 --perl
@@ -10,8 +11,12 @@
   open (my $fh, "<", "$ENV{grep_file}") or die "$ENV{grep_file}: $!";
   while (<$fh>)
   {
-    /$ENV{grep_regex}/ &&
+    if (/$ENV{grep_regex}/) {
       print;
+    } elsif (/$ENV{grep_once}/) {
+      print;
+      last;
+    }
   }
   close $fh;
 EOF
