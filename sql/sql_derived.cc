@@ -1231,7 +1231,8 @@ bool mysql_derived_fill(THD *thd, LEX *lex, TABLE_LIST *derived)
          i < join->top_join_tab_count + join->aggr_tables;
          i++)
     { 
-      if ((res= join->join_tab[i].table->file->ha_delete_all_rows()))
+      if (!join->join_tab[i].join->zero_result_cause &&
+        (res= join->join_tab[i].table->file->ha_delete_all_rows()))
         goto err;
     }   
   }
