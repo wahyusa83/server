@@ -1987,7 +1987,6 @@ static void clean_up(bool print_message)
   if (use_slave_mask)
     my_bitmap_free(&slave_error_mask);
 #endif
-  Events::deinit();
   stop_handle_manager();
   release_ddl_log();
 
@@ -2029,6 +2028,7 @@ static void clean_up(bool print_message)
   free_status_vars();
   end_thr_alarm(1);			/* Free allocated memory */
 #ifndef EMBEDDED_LIBRARY
+  Events::deinit();
   end_thr_timer();
 #endif
   my_free_open_file_info();
@@ -2098,7 +2098,8 @@ static void clean_up(bool print_message)
 static void wait_for_signal_thread_to_end()
 {
   uint i, n_waits= DBUG_EVALUATE("force_sighup_processing_timeout", 5, 100);
-  int err;
+  int err= 0;
+
   /*
     Wait up to 10 seconds for signal thread to die. We use this mainly to
     avoid getting warnings that my_thread_end has not been called
