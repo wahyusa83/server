@@ -244,6 +244,14 @@ public:
     m_prepared = false;
   }
 
+  /**
+    @brief Check whether the statement changes the contents of used tables
+    @return true if this is data change statement, false otherwise
+  */
+  virtual bool is_data_delete_stmt() const { return false; }
+  virtual bool is_data_update_stmt() const { return false; }
+  virtual bool is_data_change_stmt() const { return false; }
+
 protected:
  Sql_cmd() :  m_prepared(false), m_owner(nullptr)
   {}
@@ -304,12 +312,6 @@ class Protocol;
 class Sql_cmd_dml : public Sql_cmd
 {
 public:
-
-  /**
-    @brief Check whether the statement changes the contents of used tables
-    @return true if this is data change statement, false otherwise
-  */
-  virtual bool is_data_change_stmt() const { return true; }
 
   /**
     @brief Perform context analysis of the statement

@@ -610,4 +610,14 @@ c1	c2	c3
 2	1	4
 2	2	5
 drop table t1;
+#
+# MDEV-32212 DELETE with ORDER BY and semijoin optimization causing crash
+#
+CREATE TABLE t1 (c1 INT) ENGINE=InnoDB;
+CREATE TABLE t2 (c1 INT) ENGINE=InnoDB;
+INSERT INTO t1 values (1),(2);
+INSERT INTO t2 values (1);
+DELETE FROM t1 WHERE c1 IN (values (2)) ORDER BY c1;
+DELETE FROM t1 WHERE c1 IN (select c1 from t2) ORDER BY c1;
+DROP TABLE t1, t2;
 End of 11.1 tests

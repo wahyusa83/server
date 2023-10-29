@@ -65,6 +65,10 @@ public:
 
   void set_as_multitable() { multitable= true; }
 
+  virtual bool is_data_update_stmt() const override { return true; }
+  virtual bool is_data_delete_stmt() const override { return false; }
+  virtual bool is_data_change_stmt() const override { return true; }
+
 protected:
   /**
     @brief Perform precheck of table privileges for update statements

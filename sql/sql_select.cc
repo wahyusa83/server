@@ -1627,8 +1627,26 @@ JOIN::prepare(TABLE_LIST *tables_init, COND *conds_init, uint og_num,
     DBUG_RETURN(-1);
   if (!(select_lex->changed_elements & TOUCHED_SEL_COND))
     select_lex->check_subqueries_with_recursive_references();
-  
+ 
+  /*
+    If we are executing a DELETE statement and the effective
+    outer select has an order by clause, do not allow subquery semijoin
+    transformations, multi_delete::send_data cannot handle this.
+  */
+  bool reset_optimizer_switch= false;
+  if (thd->lex->m_sql_cmd &&
+      thd->lex->m_sql_cmd->is_data_delete_stmt() &&
+      select_lex->outer_select() &&
+      select_lex->outer_select()->order_list.elements)
+  {
+    reset_optimizer_switch= optimizer_flag(thd, OPTIMIZER_SWITCH_SEMIJOIN);
+    thd->variables.optimizer_switch&= ~OPTIMIZER_SWITCH_SEMIJOIN; 
+  }
+
   int res= check_and_do_in_subquery_rewrites(this);
+
+  if (reset_optimizer_switch)
+    thd->variables.optimizer_switch|= OPTIMIZER_SWITCH_SEMIJOIN;
 
   select_lex->fix_prepare_information(thd, &conds, &having);
   
