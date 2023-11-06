@@ -1681,6 +1681,10 @@ bool Sql_cmd_delete::prepare_inner(THD *thd)
       goto err;
     }
 
+    if (select_lex->order_list.elements &&
+        !select_lex->limit_params.select_limit)
+      join->order= NULL;
+
     if (!multitable &&
         select_lex->sj_subselects.elements)
       multitable= true;
