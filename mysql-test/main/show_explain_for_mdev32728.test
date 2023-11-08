@@ -1,0 +1,74 @@
+--source include/have_innodb.inc
+--source include/have_debug_sync.inc
+
+CREATE TABLE t1 (a INT PRIMARY KEY, b VARCHAR(100)) ENGINE=InnoDB;
+INSERT INTO t1 VALUES (1, 'foo'), (2, 'bar'), (3, 'baz'), (4, 'xyzzy');
+
+connect (con1,localhost,root,,);
+connect (con2,localhost,root,,);
+connect (con3,localhost,root,,);
+
+--connection default
+BEGIN;
+UPDATE t1 SET b=CONCAT('!', b) WHERE a=3;
+
+--connection con1
+let $thr_id=`select connection_id()`;
+set debug_sync= 'lock_wait_start signal waiting_for_lock wait_for continue';
+set debug_sync= 'apc_before_lock_thd_kill signal in_apc wait_for continue2';
+set debug_sync= 'apc_before_lock_thd_kill2 signal in_apc_woken_up';
+--echo *** T1 starts a SELECT, pauses before entering row lock wait.
+send SELECT a, b FROM t1 ORDER BY a FOR UPDATE;
+
+--connection default
+set debug_sync= 'now wait_for waiting_for_lock';
+
+--connection con3
+--echo *** T3 sends a SHOW EXPLAIN FOR, queues an apc request.
+--replace_result $thr_id THR_ID
+send_eval SHOW EXPLAIN FOR $thr_id;
+
+--connection default
+--let $wait_condition= SELECT COUNT(*)=1 FROM information_schema.processlist WHERE State='Show explain'
+--source include/wait_condition.inc
+
+--echo *** T1 takes lock_sys.wait_mutex, pauses before taking LOCK_thd_kill in apc.
+set debug_sync= 'now signal continue';
+set debug_sync= 'now wait_for in_apc';
+
+--connection con2
+--echo *** T2 sends KILL QUERY, pauses after taking LOCK_thd_kill of T1.
+set debug_sync= 'found_killee signal have_lock_thd_kill wait_for continue3';
+--replace_result $thr_id THR_ID
+send_eval KILL QUERY $thr_id;
+
+--connection default
+set debug_sync= 'now wait_for have_lock_thd_kill';
+--echo *** T1 goes to process apc, trying to take THD_lock_kill.
+set debug_sync= 'now signal continue2';
+set debug_sync= 'now wait_for in_apc_woken_up';
+--echo *** T2 proceeds to call ha_kill_query which tries to take lock_sys.wait_mutex.
+set debug_sync= 'now signal continue3';
+
+--connection con1
+--echo *** T1 aborts SELECT with "killed" error.
+--error ER_QUERY_INTERRUPTED
+reap;
+
+--echo *** T2 completes KILL QUERY.
+--connection con2
+reap;
+
+--echo *** T3 completes SHOW EXPLAIN FOR.
+--connection con3
+reap;
+
+--connection default
+ROLLBACK;
+
+--disconnect con1
+--disconnect con2
+--disconnect con3
+
+--connection default
+DROP TABLE t1;

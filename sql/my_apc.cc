@@ -203,6 +203,8 @@ void Apc_target::process_apc_requests(bool force)
   {
     Call_request *request;
 
+    DEBUG_SYNC(current_thd, "apc_before_lock_thd_kill");
+    DEBUG_SYNC(current_thd, "apc_before_lock_thd_kill2");
     if (force)
       mysql_mutex_lock(LOCK_thd_kill_ptr);
     else if (mysql_mutex_trylock(LOCK_thd_kill_ptr))
