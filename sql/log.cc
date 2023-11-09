@@ -12159,6 +12159,7 @@ int TC_LOG_BINLOG::recover(LOG_INFO *linfo, const char *last_log_name,
   char binlog_checkpoint_name[FN_REFLEN];
   bool binlog_checkpoint_found;
   IO_CACHE log;
+  IO_CACHE *cur_log;
   File file= -1;
   const char *errmsg;
 #ifdef HAVE_REPLICATION
@@ -12205,12 +12206,16 @@ int TC_LOG_BINLOG::recover(LOG_INFO *linfo, const char *last_log_name,
   */
 
   binlog_checkpoint_found= false;
+  cur_log= first_log;
   for (round= 1;;)
   {
-    while ((ev= Log_event::read_log_event(round == 1 ? first_log : &log,
-                                          fdle, opt_master_verify_checksum))
+    while ((ev= Log_event::read_log_event(cur_log, fdle,
+                                          opt_master_verify_checksum))
            && ev->is_valid())
     {
+#ifdef HAVE_REPLICATION
+      my_off_t end_pos= my_b_tell(cur_log);
+#endif
       enum Log_event_type typ= ev->get_type_code();
       switch (typ)
       {
@@ -12339,6 +12344,7 @@ int TC_LOG_BINLOG::recover(LOG_INFO *linfo, const char *last_log_name,
     } // end of while
     recover_gtid_index_end(gtid_index_recover);
     gtid_index_recover= NULL;
+    cur_log= &log;
 
     /*
       If the last binlog checkpoint event points to an older log, we have to
