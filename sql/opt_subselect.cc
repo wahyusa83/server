@@ -3714,6 +3714,8 @@ bool Duplicate_weedout_picker::check_qep(JOIN *join,
     *record_count= first_weedout_table_rec_count * sj_outer_fanout;
     *handled_fanout= dups_removed_fanout;
     *strategy= SJ_OPT_DUPS_WEEDOUT;
+
+    DBUG_EXECUTE_IF( "make_duplicate_weedout_expensive", *read_time*= 10.0;);
     if (unlikely(join->thd->trace_started()))
     {
       Json_writer_object trace(join->thd);
