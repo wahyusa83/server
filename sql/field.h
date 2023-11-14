@@ -2312,7 +2312,7 @@ public:
   Information_schema_numeric_attributes
     information_schema_numeric_attributes() const override
   {
-    return dec == NOT_FIXED_DEC ?
+    return dec >= FLOATING_POINT_DECIMALS ?
                   Information_schema_numeric_attributes(field_length) :
                   Information_schema_numeric_attributes(field_length, dec);
   }
