@@ -181,8 +181,7 @@ trx_undo_get_prev_rec_from_prev_page(buf_block_t *&block, uint16_t rec,
   if (UNIV_UNLIKELY(!block))
     return nullptr;
 
-  if (!buf_page_make_young_if_needed(&block->page))
-    buf_read_ahead_linear(block->page.id(), 0, false);
+  buf_page_make_young_if_needed(&block->page);
   return trx_undo_page_get_last_rec(block, page_no, offset);
 }
 
@@ -278,8 +277,7 @@ trx_undo_get_first_rec(const fil_space_t &space, uint32_t page_no,
   if (!block)
     return nullptr;
 
-  if (!buf_page_make_young_if_needed(&b->page))
-    buf_read_ahead_linear(b->page.id(), 0, false);
+  buf_page_make_young_if_needed(&b->page);
 
   if (trx_undo_rec_t *rec= trx_undo_page_get_first_rec(b, page_no, offset))
     return rec;
