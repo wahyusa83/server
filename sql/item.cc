@@ -6243,7 +6243,7 @@ mark_non_agg_field:
     {
       if (outer_fixed)
         thd->lex->in_sum_func->outer_fields.push_back(this, thd->mem_root);
-      else if (thd->lex->in_sum_func->nest_level !=
+      else if (select && thd->lex->in_sum_func->nest_level !=
           select->nest_level)
         select_lex->set_non_agg_field_used(true);
     }
