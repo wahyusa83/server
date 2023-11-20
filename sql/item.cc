@@ -9343,7 +9343,9 @@ bool Item_direct_view_ref::excl_dep_on_grouping_fields(st_select_lex *sel)
   if (item_equal)
   {
     DBUG_ASSERT(real_item()->type() == Item::FIELD_ITEM);
-    return (find_matching_field_pair(this, sel->grouping_tmp_fields) != NULL);
+    Field_pair *fp = find_matching_field_pair(this, sel->grouping_tmp_fields);
+    return fp && fp->corresponding_item->used_tables() ==
+        item_equal->used_tables();
   }    
   return (*ref)->excl_dep_on_grouping_fields(sel);
 }
