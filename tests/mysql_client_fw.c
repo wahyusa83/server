@@ -1426,6 +1426,9 @@ int main(int argc, char **argv)
     tests_to_run[i]= NULL;
   }
 
+  /* must be the same in C/C and embedded */
+  compile_time_assert(sizeof(MYSQL) == 1272);
+
   if (mysql_server_init(embedded_server_arg_count,
                         embedded_server_args,
                         (char**) embedded_server_groups))
