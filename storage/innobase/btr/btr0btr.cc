@@ -844,14 +844,20 @@ static rec_offs *btr_page_get_parent(rec_offs *offsets, mem_heap_t *heap,
         if (page_cur_search_with_match(tuple, PAGE_CUR_LE, &up_match,
                                        &low_match, &cursor->page_cur,
                                        nullptr))
+        {
+          sql_print_information("InnoDB: btr_page_get_parent 1");
           return nullptr;
+        }
         offsets= rec_get_offsets(cursor->page_cur.rec, index, offsets, 0,
                                  ULINT_UNDEFINED, &heap);
         p= btr_node_ptr_get_child_page_no(cursor->page_cur.rec, offsets);
         if (p != page_no)
         {
           if (btr_page_get_level(block->page.frame) == level)
+          {
+            sql_print_information("InnoDB: btr_page_get_parent 2");
             return nullptr;
+          }
           i= 0; // MDEV-29835 FIXME: require all pages to be latched in order!
           continue;
         }
@@ -867,6 +873,7 @@ static rec_offs *btr_page_get_parent(rec_offs *offsets, mem_heap_t *heap,
         return offsets;
       }
 
+  sql_print_information("InnoDB: btr_page_get_parent 3");
   return nullptr;
 }
 
@@ -888,7 +895,10 @@ btr_page_get_father_block(
   rec_t *rec=
     page_rec_get_next(page_get_infimum_rec(cursor->block()->page.frame));
   if (UNIV_UNLIKELY(!rec))
+  {
+    sql_print_information("InnoDB: btr_page_get_father_block");
     return nullptr;
+  }
   cursor->page_cur.rec= rec;
   return btr_page_get_parent(offsets, heap, cursor, mtr);
 }
