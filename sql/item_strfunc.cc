@@ -1385,20 +1385,22 @@ bool Item_func_regexp_replace::append_replacement(String *str,
 }
 
 
-String *Item_func_regexp_replace::val_str(String *str)
+String *Item_func_regexp_replace::val_str_internal(String *str,
+                                                   bool null_to_empty)
 {
   DBUG_ASSERT(fixed == 1);
   char buff0[MAX_FIELD_WIDTH];
   char buff2[MAX_FIELD_WIDTH];
   String tmp0(buff0,sizeof(buff0),&my_charset_bin);
   String tmp2(buff2,sizeof(buff2),&my_charset_bin);
-  String *source= args[0]->val_str(&tmp0);
-  String *replace= args[2]->val_str(&tmp2);
+  String *source, *replace;
   LEX_CSTRING src, rpl;
   int startoffset= 0;
 
-  if ((null_value= (args[0]->null_value || args[2]->null_value ||
-                    re.recompile(args[1]))))
+  if ((null_value=
+        (!(source= args[0]->val_str(&tmp0)) ||
+         !(replace= args[2]->val_str_null_to_empty(&tmp2, null_to_empty)) ||
+         re.recompile(args[1]))))
     return (String *) 0;
 
   if (!(source= re.convert_if_needed(source, &re.subject_converter)) ||

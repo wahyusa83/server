@@ -401,10 +401,18 @@ class Item_func_regexp_replace :public Item_str_func
   bool append_replacement(String *str,
                           const LEX_CSTRING *source,
                           const LEX_CSTRING *replace);
+protected:
+  String *val_str_internal(String *str, bool empty_string_is_null);
 public:
   Item_func_regexp_replace(THD *thd, Item *a, Item *b, Item *c):
     Item_str_func(thd, a, b, c)
     {}
+  const Schema *schema() const { return &mariadb_schema; }
+  void print(String *str, enum_query_type query_type)
+  {
+    print_sql_mode_qualified_name(str, query_type);
+    print_args_parenthesized(str, query_type);
+  }
   void cleanup()
   {
     DBUG_ENTER("Item_func_regex::cleanup");
@@ -412,11 +420,34 @@ public:
     re.cleanup();
     DBUG_VOID_RETURN;
   }
-  String *val_str(String *str);
+  String *val_str(String *str)
+  {
+    return val_str_internal(str, false);
+  }
   bool fix_fields(THD *thd, Item **ref);
   bool fix_length_and_dec();
   const char *func_name() const { return "regexp_replace"; }
-  Item *get_copy(THD *thd) { return 0;}
+  Item *get_copy(THD *thd) { return 0;} // QQ: why?
+};
+
+
+class Item_func_regexp_replace_oracle: public Item_func_regexp_replace
+{
+public:
+  Item_func_regexp_replace_oracle(THD *thd, Item *a, Item *b, Item *c)
+   :Item_func_regexp_replace(thd, a, b, c)
+  {}
+  const Schema *schema() const { return &oracle_schema_ref; }
+  bool fix_length_and_dec()
+  {
+    bool rc= Item_func_regexp_replace::fix_length_and_dec();
+    maybe_null= true; // Empty result is converted to NULL
+    return rc;
+  }
+  String *val_str(String *str)
+  {
+    return val_str_internal(str, true);
+  }
 };
 
 
