@@ -3388,9 +3388,13 @@ bool TABLE::vcol_fix_expr(THD *thd)
   if (expr_ctx.init())
     return true;
 
+  /*
+    Item's can have been fixed earlier as part of
+    unpack_vcol_info_from_frm()
+  */
   List_iterator_fast<Virtual_column_info> it(vcol_refix_list);
   while (Virtual_column_info *vcol= it++)
-    if (vcol->fix_session_expr(thd))
+    if (!vcol->expr->is_fixed() && vcol->fix_session_expr(thd))
       goto error;
 
   return false;
