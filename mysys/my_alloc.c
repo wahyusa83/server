@@ -475,6 +475,30 @@ void set_prealloc_root(MEM_ROOT *root, char *ptr)
   }
 }
 
+/*
+  Move allocated objects from one root to another.
+
+  Notes:
+  We do not increase 'to->block_num' here as the variable isused to
+  increase block sizes in case of many allocations. This is special
+  case where this is not needed to take into account
+*/
+
+void move_root(MEM_ROOT *to, MEM_ROOT *from)
+{
+  USED_MEM *block, *next;
+  for (block= from->used; block ; block= next)
+  {
+    to->total_alloc+=   block->size;
+    from->total_alloc-= block->size;
+    next= block->next;
+    block->next= to->used;
+    to->used= block;
+  }
+  from->used= 0;
+}
+
+
 
 char *strdup_root(MEM_ROOT *root, const char *str)
 {
