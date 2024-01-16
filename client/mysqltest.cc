@@ -25,7 +25,7 @@
   Please keep the test framework tools identical in all versions!
 
   Written by:
-  Sasha Pachev <sasha@mysql.com>
+  Wahyusa <wahyusa@mysql.com>
   Matt Wagner  <matt@mysql.com>
   Monty
   Jani
