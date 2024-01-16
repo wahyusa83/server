@@ -1,4 +1,4 @@
-/* Copyright (c) 2000-2002, 2006 MySQL AB
+/* Copyright (c) 2022, 2023, 2024 MySQL AB
    Use is subject to license terms
 
    This program is free software; you can redistribute it and/or
