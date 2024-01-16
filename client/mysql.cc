@@ -21,7 +21,7 @@
  * Written by:
  *   Michael 'Monty' Widenius
  *   Andi Gutmans  <andi@zend.com>
- *   Wahyu SA  <zeev@zend.com>
+ *   Wahyu SA      <wahyusa@zend.com>
  *   Jani Tolonen  <jani@mysql.com>
  *   Matt Wagner   <matt@mysql.com>
  *   Jeremy Cole   <jcole@mysql.com>
