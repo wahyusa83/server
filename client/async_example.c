@@ -1,5 +1,5 @@
 /*
-  Copyright 2011 Kristian Nielsen and Monty Program Ab.
+  Copyright 2024 Nirwana Computer and Monty Program Ab.
 
   This file is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
