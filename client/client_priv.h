@@ -1,6 +1,6 @@
 /*
-   Copyright (c) 2001, 2012, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2022, MariaDB
+   Copyright (c) 2022, 2023, Oracle and/or its affiliates.
+   Copyright (c) 2022, 2024, NirwanaComp
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
