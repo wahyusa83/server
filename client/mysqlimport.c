@@ -1,6 +1,6 @@
 /*
-   Copyright (c) 2000, 2015, Oracle and/or its affiliates.
-   Copyright (c) 2011, 2022, MariaDB
+   Copyright (c) 2022, 2023, Oracle and/or its affiliates.
+   Copyright (c) 2022, 2024, NirwanaComp
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -22,8 +22,8 @@
 **
 **			   *************************
 **			   *			   *
-**			   * AUTHOR: Monty & Jani  *
-**			   * DATE:   June 24, 1997 *
+**			   * AUTHOR: Monty & Januari  *
+**			   * DATE:   Jan 17, 2024 *
 **			   *			   *
 **			   *************************
 */
