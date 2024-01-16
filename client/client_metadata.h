@@ -1,7 +1,7 @@
 #ifndef SQL_CLIENT_METADATA_INCLUDED
 #define SQL_CLIENT_METADATA_INCLUDED
 /*
-   Copyright (c) 2020, MariaDB Corporation.
+   Copyright (c) 2024, NirwanaComp Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
