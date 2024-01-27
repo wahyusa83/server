@@ -324,6 +324,7 @@ class String;
 
 #define Q_HRNOW 128
 #define Q_XID   129
+#define Q_DUMMY 255
 
 #define Q_GTID_FLAGS3 130
 
@@ -3324,6 +3325,7 @@ public:
     When zero the event does not contain that information.
   */
   uint8 extra_engines;
+  my_thread_id thread_id;
 
   /* Flags2. */
 
@@ -3369,6 +3371,7 @@ public:
   static const uchar FL_START_ALTER_E1= 2;
   static const uchar FL_COMMIT_ALTER_E1= 4;
   static const uchar FL_ROLLBACK_ALTER_E1= 8;
+  static const uchar FL_EXTRA_THREAD_ID= 16; // thread_id like in BEGIN Query
 
 #ifdef MYSQL_SERVER
   Gtid_log_event(THD *thd_arg, uint64 seq_no, uint32 domain_id, bool standalone,
@@ -4620,6 +4623,12 @@ public:
 #endif
 
 #ifdef MYSQL_CLIENT
+  struct Field_info
+  {
+    const uchar *pos; // Point to a field in before or after image
+    size_t length;    // Length of the field.
+  };
+
   /* not for direct call, each derived has its own ::print() */
   virtual bool print(FILE *file, PRINT_EVENT_INFO *print_event_info)= 0;
   void change_to_flashback_event(PRINT_EVENT_INFO *print_event_info, uchar *rows_buff, Log_event_type ev_type);
@@ -4628,12 +4637,11 @@ public:
   size_t print_verbose_one_row(IO_CACHE *file, table_def *td,
                                PRINT_EVENT_INFO *print_event_info,
                                MY_BITMAP *cols_bitmap,
-                               const uchar *ptr, const uchar *prefix,
-                               const my_bool no_fill_output= 0); // if no_fill_output=1, then print result is unnecessary
+                               const uchar *ptr, const uchar *prefix);
   size_t calc_row_event_length(table_def *td,
-                               PRINT_EVENT_INFO *print_event_info,
                                MY_BITMAP *cols_bitmap,
-                               const uchar *value);
+                               const uchar *value,
+                               Field_info *fields);
   void count_row_events(PRINT_EVENT_INFO *print_event_info);
 
 #endif
