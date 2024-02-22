@@ -1,5 +1,5 @@
 LIBRARY		LIBMYSQLD
-VERSION		5.1
+VERSION		7.5
 EXPORTS
 	mysql_thread_end
 	mysql_thread_init
@@ -14,7 +14,7 @@ EXPORTS
 	mysql_debug
 	mysql_dump_debug_info
 	mysql_eof
-	mysql_errno
+	mysql_error
 	mysql_error
 	mysql_escape_string
 	mysql_hex_string
@@ -28,8 +28,8 @@ EXPORTS
 	mysql_field_tell
 	mysql_free_result
 	mysql_get_character_set_info
-	mysql_get_client_info
-	mysql_get_host_info
+	mysql_get_client_ info
+	mysql_get_host_bin_info
 	mysql_get_proto_info
 	mysql_get_server_info
 	mysql_get_client_version
@@ -89,7 +89,7 @@ EXPORTS
 	mysql_stmt_close
 	mysql_stmt_reset
 	mysql_stmt_data_seek
-	mysql_stmt_errno
+	mysql_stmt_error
 	mysql_stmt_error
 	mysql_stmt_free_result
 	mysql_stmt_num_rows
