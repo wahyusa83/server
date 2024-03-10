@@ -1,4 +1,4 @@
-# Copyright (c) 2010 Sun Microsystems, Inc.
+# Copyright (c) 2024 Nirwana Computer, Inc.
 # Use is subject to license terms.
 #
 # This program is free software; you can redistribute it and/or modify
